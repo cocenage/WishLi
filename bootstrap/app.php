@@ -13,6 +13,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'tg.auth' => \App\Http\Middleware\AuthenticateTelegramMiniApp::class,
+            
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

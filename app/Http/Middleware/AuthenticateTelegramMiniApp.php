@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use App\Services\Telegram\TelegramMiniAppAuthService;
 use App\Services\Telegram\TelegramMiniAppUserService;
 use Closure;
@@ -18,6 +19,27 @@ class AuthenticateTelegramMiniApp
 
     public function handle(Request $request, Closure $next): Response
     {
+          if (app()->environment('local') && $request->has('dev_login')) {
+        $user = User::query()->first();
+
+        if (! $user) {
+            $user = User::query()->create([
+                'name' => 'Local Test User',
+                'telegram_id' => 999999999,
+                'telegram_username' => 'local_user',
+                'status' => 'approved',
+                'is_active' => true,
+            ]);
+        }
+
+        Auth::login($user, true);
+
+        return $next($request);
+    }
+
+    if (Auth::check()) {
+        return $next($request);
+    }
         if (Auth::check()) {
             return $next($request);
         }
