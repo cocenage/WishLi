@@ -29,4 +29,21 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    public function ownedWishlists()
+    {
+        return $this->hasMany(\App\Models\Wishlist::class, 'owner_id');
+    }
+
+    public function wishlistMemberships()
+    {
+        return $this->hasMany(\App\Models\WishlistMember::class);
+    }
+
+    public function wishlists()
+    {
+        return $this->belongsToMany(\App\Models\Wishlist::class, 'wishlist_members')
+            ->withPivot(['role', 'status'])
+            ->withTimestamps();
+    }
 }
