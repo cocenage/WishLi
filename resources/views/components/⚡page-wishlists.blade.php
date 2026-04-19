@@ -1,10 +1,11 @@
 <?php
 
-use Livewire\Component;
 use App\Models\Wishlist;
 use Illuminate\Support\Collection;
+use Livewire\Component;
 
-new class extends Component {
+new class extends Component
+{
     public string $tab = 'all';
 
     public function setTab(string $tab): void
@@ -17,13 +18,13 @@ new class extends Component {
         $user = auth()->user();
 
         $owned = Wishlist::query()
-            ->with(['owner', 'items'])
+            ->with(['owner', 'items', 'memberLinks'])
             ->where('owner_id', $user->id)
             ->latest()
             ->get();
 
         $shared = Wishlist::query()
-            ->with(['owner', 'items'])
+            ->with(['owner', 'items', 'memberLinks'])
             ->whereHas('memberLinks', function ($query) use ($user) {
                 $query->where('user_id', $user->id)
                     ->where('status', 'accepted');
@@ -38,6 +39,13 @@ new class extends Component {
             default => $owned->merge($shared)->unique('id')->values(),
         };
     }
+
+    public function claimsCount(Wishlist $wishlist): int
+    {
+        return \App\Models\WishlistItemClaim::query()
+            ->whereHas('item', fn ($query) => $query->where('wishlist_id', $wishlist->id))
+            ->count();
+    }
 };
 ?>
 
@@ -46,35 +54,46 @@ new class extends Component {
         <h1 class="text-2xl font-semibold text-[#1f2a37]">Вишлисты</h1>
 
         <div class="mt-4 flex gap-2 overflow-x-auto">
-            <button wire:click="setTab('all')"
-                class="rounded-full px-4 py-2 text-sm {{ $tab === 'all' ? 'bg-[#1f2a37] text-white' : 'bg-white text-[#1f2a37]' }}">
-                Все
+            <button
+                wire:click="setTab('all')"
+                class="whitespace-nowrap rounded-full px-4 py-2 text-sm {{ $tab === 'all' ? 'bg-[#1f2a37] text-white' : 'bg-white text-[#1f2a37]' }}"
+            >
+                Все вишлисты
             </button>
 
-            <button wire:click="setTab('mine')"
-                class="rounded-full px-4 py-2 text-sm {{ $tab === 'mine' ? 'bg-[#1f2a37] text-white' : 'bg-white text-[#1f2a37]' }}">
+            <button
+                wire:click="setTab('mine')"
+                class="whitespace-nowrap rounded-full px-4 py-2 text-sm {{ $tab === 'mine' ? 'bg-[#1f2a37] text-white' : 'bg-white text-[#1f2a37]' }}"
+            >
                 Мои
             </button>
 
-            <button wire:click="setTab('shared')"
-                class="rounded-full px-4 py-2 text-sm {{ $tab === 'shared' ? 'bg-[#1f2a37] text-white' : 'bg-white text-[#1f2a37]' }}">
+            <button
+                wire:click="setTab('shared')"
+                class="whitespace-nowrap rounded-full px-4 py-2 text-sm {{ $tab === 'shared' ? 'bg-[#1f2a37] text-white' : 'bg-white text-[#1f2a37]' }}"
+            >
                 Мне прислали
             </button>
         </div>
     </div>
 
-    <div class="mt-5 px-4 space-y-3">
+    <div class="mt-5 space-y-3 px-4">
         @forelse($this->wishlists as $wishlist)
-            <a href="{{ route('wishlists.show', $wishlist) }}"
-               class="block rounded-[24px] bg-white p-4 shadow-sm">
-                <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <h2 class="text-base font-semibold text-[#1f2a37]">
-                            {{ $wishlist->emoji }} {{ $wishlist->title }}
-                        </h2>
+            <a
+                href="{{ route('page-wishlist-show', ['wishlist' => $wishlist->id]) }}"
+                class="block rounded-[24px] bg-white p-4 shadow-sm"
+            >
+                <div class="flex items-start justify-between gap-4">
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                            <div class="text-xl">{{ $wishlist->emoji ?: '🎁' }}</div>
+                            <h2 class="truncate text-base font-semibold text-[#1f2a37]">
+                                {{ $wishlist->title }}
+                            </h2>
+                        </div>
 
                         @if($wishlist->description)
-                            <p class="mt-1 text-sm text-[#6b7280] line-clamp-2">
+                            <p class="mt-2 line-clamp-2 text-sm text-[#6b7280]">
                                 {{ $wishlist->description }}
                             </p>
                         @endif
@@ -82,7 +101,9 @@ new class extends Component {
                         <div class="mt-3 flex flex-wrap gap-2 text-xs text-[#6b7280]">
                             <span>{{ $wishlist->items->count() }} товаров</span>
                             <span>•</span>
-                            <span>{{ $wishlist->participants_count }} участников</span>
+                            <span>{{ $wishlist->memberLinks->where('status', 'accepted')->count() }} участников</span>
+                            <span>•</span>
+                            <span>{{ $this->claimsCount($wishlist) }} выборов</span>
 
                             @if($wishlist->event_date)
                                 <span>•</span>
@@ -90,11 +111,23 @@ new class extends Component {
                             @endif
                         </div>
 
+                        <div class="mt-2 flex items-center gap-2">
+                            @if($wishlist->is_archived)
+                                <span class="inline-flex rounded-full bg-[#e5e7eb] px-2 py-1 text-[11px] font-medium text-[#374151]">
+                                    Архив
+                                </span>
+                            @elseif($wishlist->event_date && $wishlist->event_date->isFuture())
+                                <span class="inline-flex rounded-full bg-[#dbeafe] px-2 py-1 text-[11px] font-medium text-[#1d4ed8]">
+                                    Активный
+                                </span>
+                            @endif
+                        </div>
+
                         <div class="mt-2 text-xs text-[#94a3b8]">
                             @if($wishlist->owner_id === auth()->id())
                                 Мой список
                             @else
-                                {{ $wishlist->owner->name }}
+                                {{ $wishlist->owner?->name }}
                             @endif
                         </div>
                     </div>
@@ -120,9 +153,11 @@ new class extends Component {
         @endforelse
     </div>
 
-    <div class="fixed inset-x-0 bottom-0 p-4">
-        <a href="{{ route('wishlists.create') }}"
-           class="block rounded-[20px] bg-[#1f2a37] px-5 py-4 text-center text-sm font-medium text-white shadow-lg">
+    <div class="fixed inset-x-0 bottom-0 p-4" style="padding-bottom: max(16px, env(safe-area-inset-bottom));">
+        <a
+            href="{{ route('page-wishlist-create') }}"
+            class="block rounded-[20px] bg-[#1f2a37] px-5 py-4 text-center text-sm font-medium text-white shadow-lg"
+        >
             Создать вишлист
         </a>
     </div>

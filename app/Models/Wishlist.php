@@ -70,7 +70,7 @@ class Wishlist extends Model
     public function getClaimsCountAttribute(): int
     {
         return WishlistItemClaim::query()
-            ->whereIn('wishlist_item_id', $this->items()->pluck('id'))
+            ->whereHas('item', fn($query) => $query->where('wishlist_id', $this->id))
             ->count();
     }
 
@@ -81,7 +81,7 @@ class Wishlist extends Model
 
     public function hasParticipant(?User $user): bool
     {
-        if (! $user) {
+        if (!$user) {
             return false;
         }
 
@@ -90,4 +90,22 @@ class Wishlist extends Model
             ->where('status', 'accepted')
             ->exists();
     }
+
+    public function invites(): HasMany
+    {
+        return $this->hasMany(WishlistInvite::class);
+    }
+
+    public function scopeOwnedBy($query, int $userId)
+{
+    return $query->where('owner_id', $userId);
+}
+
+public function scopeSharedWith($query, int $userId)
+{
+    return $query->whereHas('memberLinks', function ($q) use ($userId) {
+        $q->where('user_id', $userId)
+            ->where('status', 'accepted');
+    })->where('owner_id', '!=', $userId);
+}
 }
