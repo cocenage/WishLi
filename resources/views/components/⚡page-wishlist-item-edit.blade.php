@@ -19,6 +19,7 @@ new class extends Component
     public string $note = '';
     public string $priority = 'medium';
     public bool $is_hidden = false;
+    public bool $is_purchased = false;
 
     public function mount(Wishlist $wishlist, WishlistItem $item): void
     {
@@ -42,6 +43,7 @@ new class extends Component
         $this->note = (string) $item->note;
         $this->priority = $item->priority ?: 'medium';
         $this->is_hidden = (bool) $item->is_hidden;
+        $this->is_purchased = (bool) $item->is_purchased;
     }
 
     public function save()
@@ -69,6 +71,7 @@ new class extends Component
             'note' => $validated['note'] ?: null,
             'priority' => $validated['priority'],
             'is_hidden' => $this->is_hidden,
+            'is_purchased' => $this->is_purchased,
         ]);
 
         return redirect()->route('page-wishlist-show', ['wishlist' => $this->wishlist->id]);
@@ -148,6 +151,11 @@ new class extends Component
         <label class="flex items-center justify-between rounded-2xl bg-[#eef2f7] px-4 py-4">
             <span class="text-sm text-[#1f2a37]">Скрыть товар</span>
             <input wire:model.defer="is_hidden" type="checkbox">
+        </label>
+
+        <label class="flex items-center justify-between rounded-2xl bg-[#eef2f7] px-4 py-4">
+            <span class="text-sm text-[#1f2a37]">Отметить как куплено</span>
+            <input wire:model.defer="is_purchased" type="checkbox">
         </label>
     </div>
 

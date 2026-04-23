@@ -7,17 +7,20 @@ use Livewire\Component;
 new class extends Component
 {
     public string $title = '';
+    public string $type = 'birthday';
     public string $description = '';
     public ?string $event_date = null;
     public string $visibility = 'link';
     public bool $allow_item_addition = true;
     public bool $allow_multi_claim = true;
+    public bool $hide_claimers = false;
     public string $emoji = '🎁';
 
     public function save()
     {
         $validated = $this->validate([
             'title' => ['required', 'string', 'max:255'],
+            'type' => ['nullable', 'string', 'max:50'],
             'description' => ['nullable', 'string', 'max:1000'],
             'event_date' => ['nullable', 'date'],
             'visibility' => ['required', 'in:private,link,invited'],
@@ -27,11 +30,13 @@ new class extends Component
         $wishlist = Wishlist::query()->create([
             'owner_id' => auth()->id(),
             'title' => $validated['title'],
+            'type' => $validated['type'] ?: 'birthday',
             'description' => $validated['description'] ?: null,
             'event_date' => $validated['event_date'] ?: null,
             'visibility' => $validated['visibility'],
             'allow_item_addition' => $this->allow_item_addition,
             'allow_multi_claim' => $this->allow_multi_claim,
+            'hide_claimers' => $this->hide_claimers,
             'emoji' => $validated['emoji'] ?: '🎁',
         ]);
 
@@ -72,6 +77,19 @@ new class extends Component
         </div>
 
         <div>
+            <label class="mb-2 block text-sm font-medium text-[#1f2a37]">Тип</label>
+            <select
+                wire:model.defer="type"
+                class="w-full rounded-2xl border-0 bg-[#eef2f7] px-4 py-3 text-sm"
+            >
+                <option value="birthday">День рождения</option>
+                <option value="new_year">Новый год</option>
+                <option value="wedding">Свадьба</option>
+                <option value="house">Переезд</option>
+            </select>
+        </div>
+
+        <div>
             <label class="mb-2 block text-sm font-medium text-[#1f2a37]">Описание</label>
             <textarea
                 wire:model.defer="description"
@@ -109,6 +127,11 @@ new class extends Component
         <label class="flex items-center justify-between rounded-2xl bg-[#eef2f7] px-4 py-4">
             <span class="text-sm text-[#1f2a37]">Несколько человек могут выбрать один подарок</span>
             <input wire:model.defer="allow_multi_claim" type="checkbox">
+        </label>
+
+        <label class="flex items-center justify-between rounded-2xl bg-[#eef2f7] px-4 py-4">
+            <span class="text-sm text-[#1f2a37]">Скрывать, кто выбрал подарок</span>
+            <input wire:model.defer="hide_claimers" type="checkbox">
         </label>
     </div>
 

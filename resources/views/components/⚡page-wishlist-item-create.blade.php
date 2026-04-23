@@ -19,6 +19,7 @@ new class extends Component
     public string $currency = '₽';
     public string $note = '';
     public string $priority = 'medium';
+    public ?string $previewError = null;
 
     public function mount(Wishlist $wishlist): void
     {
@@ -32,6 +33,8 @@ new class extends Component
 
     public function fetchPreview(): void
     {
+        $this->previewError = null;
+
         $this->validate([
             'url' => ['required', 'url'],
         ]);
@@ -44,6 +47,7 @@ new class extends Component
                 ->get($this->url);
 
             if (! $response->successful()) {
+                $this->previewError = 'Не удалось получить данные по ссылке. Заполни карточку вручную.';
                 return;
             }
 
@@ -75,6 +79,7 @@ new class extends Component
             }
         } catch (\Throwable $e) {
             report($e);
+            $this->previewError = 'Не удалось получить данные по ссылке. Заполни карточку вручную.';
         }
     }
 
@@ -203,6 +208,12 @@ new class extends Component
             </div>
             @error('url') <div class="mt-1 text-sm text-red-500">{{ $message }}</div> @enderror
         </div>
+
+        @if($previewError)
+            <div class="rounded-2xl bg-[#fef3c7] px-4 py-3 text-sm text-[#92400e]">
+                {{ $previewError }}
+            </div>
+        @endif
 
         @if($image_url)
             <div class="h-48 overflow-hidden rounded-[24px] bg-[#eef2f7]">

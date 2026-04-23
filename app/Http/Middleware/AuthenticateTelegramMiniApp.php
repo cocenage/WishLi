@@ -23,13 +23,17 @@ class AuthenticateTelegramMiniApp
         $user = User::query()->first();
 
         if (! $user) {
-            $user = User::query()->create([
-                'name' => 'Local Test User',
-                'telegram_id' => 999999999,
-                'telegram_username' => 'local_user',
-                'status' => 'approved',
-                'is_active' => true,
-            ]);
+           $user = \App\Models\User::query()->firstOrCreate(
+        ['email' => 'dev@example.com'],
+        [
+            'name' => 'Dev User',
+            'password' => bcrypt('password'),
+            'telegram_id' => 999999999,
+            'telegram_username' => 'dev_user',
+            'status' => 'approved',
+            'is_active' => true,
+        ]
+    );
         }
 
         Auth::login($user, true);

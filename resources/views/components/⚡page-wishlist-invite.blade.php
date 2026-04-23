@@ -22,6 +22,17 @@ new class extends Component
         }
     }
 
+    public function typeLabel(): string
+    {
+        return match ($this->invite->wishlist->type) {
+            'birthday' => 'День рождения',
+            'new_year' => 'Новый год',
+            'wedding' => 'Свадьба',
+            'house' => 'Переезд',
+            default => 'Вишлист',
+        };
+    }
+
     public function join()
     {
         WishlistMember::query()->firstOrCreate(
@@ -47,6 +58,12 @@ new class extends Component
         <h1 class="mt-4 text-2xl font-semibold text-[#1f2a37]">
             {{ $invite->wishlist->title }}
         </h1>
+
+        <div class="mt-2">
+            <span class="inline-flex rounded-full bg-[#eef2f7] px-2 py-1 text-[11px] font-medium text-[#1f2a37]">
+                {{ $this->typeLabel() }}
+            </span>
+        </div>
 
         @if($invite->wishlist->description)
             <p class="mt-2 text-sm text-[#6b7280]">

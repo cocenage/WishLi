@@ -17,6 +17,10 @@ new class extends Component
     {
         $user = auth()->user();
 
+        if (! $user) {
+            return collect();
+        }
+
         $owned = Wishlist::query()
             ->with(['owner', 'items', 'memberLinks'])
             ->where('owner_id', $user->id)
@@ -45,6 +49,22 @@ new class extends Component
         return \App\Models\WishlistItemClaim::query()
             ->whereHas('item', fn ($query) => $query->where('wishlist_id', $wishlist->id))
             ->count();
+    }
+
+    public function typeLabel(Wishlist $wishlist): string
+    {
+        return match ($wishlist->type) {
+            'birthday' => 'День рождения',
+            'new_year' => 'Новый год',
+            'wedding' => 'Свадьба',
+            'house' => 'Переезд',
+            default => 'Вишлист',
+        };
+    }
+
+    public function isUnavailable(Wishlist $wishlist): bool
+    {
+        return $wishlist->is_closed || ($wishlist->event_date && $wishlist->event_date->isPast());
     }
 };
 ?>
@@ -92,6 +112,28 @@ new class extends Component
                             </h2>
                         </div>
 
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <span class="inline-flex rounded-full bg-[#eef2f7] px-2 py-1 text-[11px] font-medium text-[#1f2a37]">
+                                {{ $this->typeLabel($wishlist) }}
+                            </span>
+
+                            @if($this->isUnavailable($wishlist))
+                                <span class="inline-flex rounded-full bg-[#fee2e2] px-2 py-1 text-[11px] font-medium text-[#991b1b]">
+                                    Закрыт
+                                </span>
+                            @elseif($wishlist->event_date && $wishlist->event_date->isFuture())
+                                <span class="inline-flex rounded-full bg-[#dbeafe] px-2 py-1 text-[11px] font-medium text-[#1d4ed8]">
+                                    Активный
+                                </span>
+                            @endif
+
+                            @if($wishlist->is_archived)
+                                <span class="inline-flex rounded-full bg-[#e5e7eb] px-2 py-1 text-[11px] font-medium text-[#374151]">
+                                    Архив
+                                </span>
+                            @endif
+                        </div>
+
                         @if($wishlist->description)
                             <p class="mt-2 line-clamp-2 text-sm text-[#6b7280]">
                                 {{ $wishlist->description }}
@@ -108,18 +150,6 @@ new class extends Component
                             @if($wishlist->event_date)
                                 <span>•</span>
                                 <span>до {{ $wishlist->event_date->format('d.m.Y') }}</span>
-                            @endif
-                        </div>
-
-                        <div class="mt-2 flex items-center gap-2">
-                            @if($wishlist->is_archived)
-                                <span class="inline-flex rounded-full bg-[#e5e7eb] px-2 py-1 text-[11px] font-medium text-[#374151]">
-                                    Архив
-                                </span>
-                            @elseif($wishlist->event_date && $wishlist->event_date->isFuture())
-                                <span class="inline-flex rounded-full bg-[#dbeafe] px-2 py-1 text-[11px] font-medium text-[#1d4ed8]">
-                                    Активный
-                                </span>
                             @endif
                         </div>
 
@@ -145,9 +175,10 @@ new class extends Component
             </a>
         @empty
             <div class="rounded-[24px] bg-white p-8 text-center shadow-sm">
-                <h3 class="text-base font-semibold text-[#1f2a37]">Пока пусто</h3>
+                <div class="text-4xl">🎁</div>
+                <h3 class="mt-3 text-base font-semibold text-[#1f2a37]">Пока нет вишлистов</h3>
                 <p class="mt-2 text-sm text-[#6b7280]">
-                    Создай первый вишлист или дождись приглашения.
+                    Создай первый вишлист и отправь его друзьям.
                 </p>
             </div>
         @endforelse

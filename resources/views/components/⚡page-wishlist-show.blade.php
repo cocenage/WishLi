@@ -3,7 +3,6 @@
 use App\Models\Wishlist;
 use App\Models\WishlistItem;
 use App\Models\WishlistItemClaim;
-use App\Models\WishlistInvite;
 use App\Models\WishlistMember;
 use Illuminate\Support\Str;
 use Livewire\Component;
@@ -100,11 +99,35 @@ new class extends Component
         $this->selectedItemId = null;
     }
 
+    public function isUnavailable(): bool
+    {
+        return $this->wishlist->is_closed || ($this->wishlist->event_date && $this->wishlist->event_date->isPast());
+    }
+
+    public function typeLabel(): string
+    {
+        return match ($this->wishlist->type) {
+            'birthday' => 'День рождения',
+            'new_year' => 'Новый год',
+            'wedding' => 'Свадьба',
+            'house' => 'Переезд',
+            default => 'Вишлист',
+        };
+    }
+
     public function claimItem(int $itemId): void
     {
         $item = WishlistItem::query()
             ->with('wishlist', 'claims')
             ->findOrFail($itemId);
+
+        if ($item->wishlist->owner_id === auth()->id()) {
+            return;
+        }
+
+        if ($this->isUnavailable()) {
+            return;
+        }
 
         if (! $item->wishlist->allow_multi_claim && $item->claims()->exists()) {
             return;
@@ -163,6 +186,25 @@ new class extends Component
         return redirect()->route('page-wishlists');
     }
 
+    public function statusLabel(WishlistItem $item): string
+    {
+        if ($item->is_purchased) {
+            return 'Куплено';
+        }
+
+        $count = $item->claims->count();
+
+        if ($count === 0) {
+            return 'Никто не выбрал';
+        }
+
+        if ($count === 1) {
+            return '1 человек хочет подарить';
+        }
+
+        return $count . ' человека хотят подарить';
+    }
+
     public function getSelectedItemProperty(): ?WishlistItem
     {
         if (! $this->selectedItemId) {
@@ -186,6 +228,18 @@ new class extends Component
                         {{ $wishlist->emoji ?: '🎁' }} {{ $wishlist->title }}
                     </h1>
 
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        <span class="inline-flex rounded-full bg-[#eef2f7] px-2 py-1 text-[11px] font-medium text-[#1f2a37]">
+                            {{ $this->typeLabel() }}
+                        </span>
+
+                        @if($this->isUnavailable())
+                            <span class="inline-flex rounded-full bg-[#fee2e2] px-2 py-1 text-[11px] font-medium text-[#991b1b]">
+                                Закрыт
+                            </span>
+                        @endif
+                    </div>
+
                     @if($wishlist->description)
                         <p class="mt-2 text-sm text-[#6b7280]">
                             {{ $wishlist->description }}
@@ -204,6 +258,12 @@ new class extends Component
                     </div>
                 </div>
             </div>
+
+            @if($this->isUnavailable())
+                <div class="mt-4 rounded-[24px] bg-[#fee2e2] px-4 py-4 text-sm text-[#991b1b]">
+                    Этот вишлист закрыт. Новые подарки выбрать нельзя.
+                </div>
+            @endif
 
             <div class="mt-4 flex gap-2">
                 <a
@@ -239,8 +299,35 @@ new class extends Component
             </div>
 
             @if($shareUrl)
-                <div class="mt-3 break-all rounded-2xl bg-[#eef2f7] px-4 py-3 text-sm text-[#1f2a37]">
-                    {{ $shareUrl }}
+                <div class="mt-3 flex gap-2">
+                    <div class="min-w-0 flex-1 break-all rounded-2xl bg-[#eef2f7] px-4 py-3 text-sm text-[#1f2a37]">
+                        {{ $shareUrl }}
+                    </div>
+
+                    <button
+                        type="button"
+                        onclick="navigator.clipboard.writeText('{{ $shareUrl }}')"
+                        class="rounded-2xl bg-[#eef2f7] px-4 py-3 text-sm font-medium text-[#1f2a37]"
+                    >
+                        Копировать
+                    </button>
+                </div>
+            @endif
+
+            @if($wishlist->memberLinks->where('status', 'accepted')->count())
+                <div class="mt-4">
+                    <div class="text-xs text-[#6b7280]">Участники</div>
+
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        @foreach($wishlist->memberLinks->where('status', 'accepted') as $member)
+                            <div class="inline-flex items-center gap-2 rounded-full bg-[#eef2f7] px-3 py-2 text-xs text-[#1f2a37]">
+                                <div class="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-[#1f2a37]">
+                                    {{ mb_substr($member->user?->name ?? '?', 0, 1) }}
+                                </div>
+                                <span>{{ $member->user?->name }}</span>
+                            </div>
+                        @endforeach
+                    </div>
                 </div>
             @endif
         </div>
@@ -323,18 +410,27 @@ new class extends Component
                                     Низкий
                                 </span>
                             @endif
+
+                            @if($item->is_purchased)
+                                <span class="inline-flex rounded-full bg-[#dcfce7] px-2 py-1 text-[11px] font-medium text-[#166534]">
+                                    Куплено
+                                </span>
+                            @endif
                         </div>
 
                         <div class="mt-3 text-xs text-[#6b7280]">
-                            Хотят подарить: {{ $item->claims->count() }}
+                            {{ $this->statusLabel($item) }}
                         </div>
                     </div>
                 </div>
             </button>
         @empty
             <div class="rounded-[24px] bg-white p-8 text-center shadow-sm">
-                <h3 class="text-base font-semibold text-[#1f2a37]">Товаров пока нет</h3>
-                <p class="mt-2 text-sm text-[#6b7280]">Добавь первый подарок в этот вишлист.</p>
+                <div class="text-4xl">✨</div>
+                <h3 class="mt-3 text-base font-semibold text-[#1f2a37]">Пока нет подарков</h3>
+                <p class="mt-2 text-sm text-[#6b7280]">
+                    Добавь первый подарок, чтобы другие могли его выбрать.
+                </p>
             </div>
         @endforelse
     </div>
@@ -395,6 +491,28 @@ new class extends Component
                     </div>
                 @endif
 
+                <div class="mt-3 flex flex-wrap gap-2">
+                    @if($this->selectedItem->priority === 'high')
+                        <span class="inline-flex rounded-full bg-[#fee2e2] px-2 py-1 text-[11px] font-medium text-[#991b1b]">
+                            Очень хочу
+                        </span>
+                    @elseif($this->selectedItem->priority === 'medium')
+                        <span class="inline-flex rounded-full bg-[#fef3c7] px-2 py-1 text-[11px] font-medium text-[#92400e]">
+                            Средний приоритет
+                        </span>
+                    @else
+                        <span class="inline-flex rounded-full bg-[#e5e7eb] px-2 py-1 text-[11px] font-medium text-[#374151]">
+                            Низкий приоритет
+                        </span>
+                    @endif
+
+                    @if($this->selectedItem->is_purchased)
+                        <span class="inline-flex rounded-full bg-[#dcfce7] px-2 py-1 text-[11px] font-medium text-[#166534]">
+                            Куплено
+                        </span>
+                    @endif
+                </div>
+
                 @if($this->selectedItem->description)
                     <p class="mt-4 text-sm text-[#6b7280]">
                         {{ $this->selectedItem->description }}
@@ -408,34 +526,42 @@ new class extends Component
                 @endif
 
                 <div class="mt-4 text-sm text-[#6b7280]">
-                    Уже хотят подарить: {{ $this->selectedItem->claims->count() }}
+                    {{ $this->statusLabel($this->selectedItem) }}
                 </div>
 
                 @if($this->selectedItem->claims->count())
-                    <div class="mt-2 flex flex-wrap gap-2">
-                        @foreach($this->selectedItem->claims as $claim)
-                            <div class="rounded-full bg-[#eef2f7] px-3 py-1 text-xs text-[#1f2a37]">
-                                {{ $claim->user?->name }}
-                            </div>
-                        @endforeach
-                    </div>
+                    @if($wishlist->hide_claimers && $wishlist->owner_id !== auth()->id())
+                        <div class="mt-2 text-sm text-[#6b7280]">
+                            Кто именно выбрал подарок скрыто.
+                        </div>
+                    @else
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            @foreach($this->selectedItem->claims as $claim)
+                                <div class="rounded-full bg-[#eef2f7] px-3 py-1 text-xs text-[#1f2a37]">
+                                    {{ $claim->user?->name }}
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
                 @endif
 
                 <div class="mt-5 flex gap-2">
-                    @if($this->selectedItem->claims->where('user_id', auth()->id())->count())
-                        <button
-                            wire:click="unclaimItem({{ $this->selectedItem->id }})"
-                            class="flex-1 rounded-2xl bg-[#eef2f7] px-4 py-3 text-sm font-medium text-[#1f2a37]"
-                        >
-                            Ты участвуешь
-                        </button>
-                    @else
-                        <button
-                            wire:click="claimItem({{ $this->selectedItem->id }})"
-                            class="flex-1 rounded-2xl bg-[#1f2a37] px-4 py-3 text-sm font-medium text-white"
-                        >
-                            Подарить
-                        </button>
+                    @if(! $this->isUnavailable() && $wishlist->owner_id !== auth()->id())
+                        @if($this->selectedItem->claims->where('user_id', auth()->id())->count())
+                            <button
+                                wire:click="unclaimItem({{ $this->selectedItem->id }})"
+                                class="flex-1 rounded-2xl bg-[#eef2f7] px-4 py-3 text-sm font-medium text-[#1f2a37]"
+                            >
+                                Ты участвуешь
+                            </button>
+                        @else
+                            <button
+                                wire:click="claimItem({{ $this->selectedItem->id }})"
+                                class="flex-1 rounded-2xl bg-[#1f2a37] px-4 py-3 text-sm font-medium text-white"
+                            >
+                                Подарить
+                            </button>
+                        @endif
                     @endif
 
                     @if($this->selectedItem->url)

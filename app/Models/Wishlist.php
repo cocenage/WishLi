@@ -21,6 +21,9 @@ class Wishlist extends Model
         'color',
         'emoji',
         'is_archived',
+        'type',
+        'is_closed',
+        'hide_claimers',
     ];
 
     protected function casts(): array
@@ -30,6 +33,8 @@ class Wishlist extends Model
             'allow_item_addition' => 'boolean',
             'allow_multi_claim' => 'boolean',
             'is_archived' => 'boolean',
+            'is_closed' => 'boolean',
+            'hide_claimers' => 'boolean',
         ];
     }
 
@@ -97,15 +102,36 @@ class Wishlist extends Model
     }
 
     public function scopeOwnedBy($query, int $userId)
-{
-    return $query->where('owner_id', $userId);
-}
+    {
+        return $query->where('owner_id', $userId);
+    }
 
-public function scopeSharedWith($query, int $userId)
-{
-    return $query->whereHas('memberLinks', function ($q) use ($userId) {
-        $q->where('user_id', $userId)
-            ->where('status', 'accepted');
-    })->where('owner_id', '!=', $userId);
-}
+    public function scopeSharedWith($query, int $userId)
+    {
+        return $query->whereHas('memberLinks', function ($q) use ($userId) {
+            $q->where('user_id', $userId)
+                ->where('status', 'accepted');
+        })->where('owner_id', '!=', $userId);
+    }
+
+    public function isExpired(): bool
+    {
+        return $this->event_date && $this->event_date->isPast();
+    }
+
+    public function isUnavailable(): bool
+    {
+        return $this->is_closed || $this->isExpired();
+    }
+
+    public function typeLabel(): string
+    {
+        return match ($this->type) {
+            'birthday' => 'День рождения',
+            'new_year' => 'Новый год',
+            'wedding' => 'Свадьба',
+            'house' => 'Переезд',
+            default => 'Вишлист',
+        };
+    }
 }

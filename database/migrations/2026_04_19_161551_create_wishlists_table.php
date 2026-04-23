@@ -26,6 +26,10 @@ return new class extends Migration
             $table->string('color')->nullable();
             $table->string('emoji')->nullable();
 
+            $table->string('type')->nullable()->after('title');
+            $table->boolean('is_closed')->default(false)->after('is_archived');
+            $table->boolean('hide_claimers')->default(false)->after('allow_multi_claim');
+
             $table->boolean('is_archived')->default(false);
 
             $table->timestamps();

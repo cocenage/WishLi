@@ -21,6 +21,7 @@ class WishlistItem extends Model
         'note',
         'priority',
         'is_hidden',
+        'is_purchased',
     ];
 
     protected function casts(): array
@@ -28,6 +29,7 @@ class WishlistItem extends Model
         return [
             'price' => 'decimal:2',
             'is_hidden' => 'boolean',
+            'is_purchased' => 'boolean',
         ];
     }
 
@@ -59,4 +61,19 @@ class WishlistItem extends Model
 
         return $this->claims()->where('user_id', $user->id)->exists();
     }
+
+    public function statusLabel(): string
+{
+    if ($this->is_purchased) {
+        return 'Куплено';
+    }
+
+    if ($this->claims()->count() > 0) {
+        return $this->claims()->count() === 1
+            ? '1 человек хочет подарить'
+            : $this->claims()->count() . ' человека хотят подарить';
+    }
+
+    return 'Никто не выбрал';
+}
 }
