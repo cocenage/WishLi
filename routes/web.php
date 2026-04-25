@@ -1,25 +1,26 @@
 <?php
 
+use App\Http\Controllers\TelegramAuthController;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return redirect()->route('page-wishlists');
+    return redirect()->route('telegram.login');
 })->name('home');
 
-/**
- * Нужен только чтобы Laravel auth middleware не падал Route [login] not defined.
- * Вход в проде — только через Telegram Mini App.
- */
 Route::get('/login', function () {
-    abort(403, 'Открой приложение через Telegram.');
+    return redirect()->route('telegram.login');
 })->name('login');
 
-/**
- * Только локально.
- */
+Route::get('/tg-login', function () {
+    return view('telegram-login');
+})->name('telegram.login');
+
+Route::post('/telegram/auth', TelegramAuthController::class)
+    ->name('telegram.auth');
+
 Route::get('/dev-login', function () {
     abort_unless(app()->environment('local'), 404);
 
@@ -53,10 +54,6 @@ Route::get('/php-test', function () {
     ];
 });
 
-/**
- * Локально — обычная сессия.
- * На проде — Telegram initData.
- */
 $wishliMiddleware = app()->environment('local')
     ? ['auth']
     : ['tg.auth'];
@@ -85,5 +82,5 @@ Route::middleware($wishliMiddleware)->group(function () {
 });
 
 Route::fallback(function () {
-    return redirect()->route('page-wishlists');
+    return redirect()->route('telegram.login');
 });
