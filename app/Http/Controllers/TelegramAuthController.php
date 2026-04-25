@@ -17,8 +17,8 @@ class TelegramAuthController extends Controller
 
     public function __invoke(Request $request): JsonResponse
     {
-        $initData = $request->header('X-Telegram-Init-Data')
-            ?? $request->input('init_data');
+        $initData = $request->header('X-Telegram-Init-Data') ?? $request->input('init_data');
+        $startParam = $request->input('start_param');
 
         if (! $initData) {
             return response()->json([
@@ -55,7 +55,32 @@ class TelegramAuthController extends Controller
 
         return response()->json([
             'ok' => true,
-            'redirect' => route('page-wishlists'),
+            'redirect' => $this->redirectByStartParam($startParam),
         ]);
+    }
+
+    protected function redirectByStartParam(?string $startParam): string
+    {
+        if (! $startParam) {
+            return route('page-wishlists');
+        }
+
+        if (str_starts_with($startParam, 'invite_')) {
+            return route('page-wishlist-invite', [
+                'token' => substr($startParam, strlen('invite_')),
+            ]);
+        }
+
+        if ($startParam === 'create') {
+            return route('page-wishlist-create');
+        }
+
+        if (str_starts_with($startParam, 'wishlist_')) {
+            return route('page-wishlist-show', [
+                'wishlist' => (int) substr($startParam, strlen('wishlist_')),
+            ]);
+        }
+
+        return route('page-wishlists');
     }
 }

@@ -175,26 +175,36 @@ new class extends Component
         $this->claimComment = '';
     }
 
-    public function generateInvite(): void
-    {
-        abort_unless($this->wishlist->owner_id === auth()->id(), 403);
+ public function generateInvite(): void
+{
+    abort_unless($this->wishlist->owner_id === auth()->id(), 403);
 
-        $invite = $this->wishlist->invites()
-            ->where('is_active', true)
-            ->latest()
-            ->first();
+    $invite = $this->wishlist->invites()
+        ->where('is_active', true)
+        ->latest()
+        ->first();
 
-        if (! $invite) {
-            $invite = $this->wishlist->invites()->create([
-                'created_by' => auth()->id(),
-                'token' => Str::random(40),
-            ]);
-        }
-
-        $this->shareUrl = route('page-wishlist-invite', ['token' => $invite->token]);
-
-        $this->dispatch('wishlist-share-ready', url: $this->shareUrl, title: $this->wishlist->title);
+    if (! $invite) {
+        $invite = $this->wishlist->invites()->create([
+            'created_by' => auth()->id(),
+            'token' => Str::random(40),
+        ]);
     }
+
+    $botUsername = config('services.telegram.bot_username');
+
+    if ($botUsername) {
+        $this->shareUrl = "https://t.me/{$botUsername}/app?startapp=invite_{$invite->token}";
+    } else {
+        $this->shareUrl = route('page-wishlist-invite', ['token' => $invite->token]);
+    }
+
+    $this->dispatch(
+        'wishlist-share-ready',
+        url: $this->shareUrl,
+        title: $this->wishlist->title
+    );
+}
 
     public function leaveWishlist()
     {

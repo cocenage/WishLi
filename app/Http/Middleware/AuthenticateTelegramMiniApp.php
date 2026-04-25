@@ -15,6 +15,6 @@ class AuthenticateTelegramMiniApp
             return $next($request);
         }
 
-        return redirect()->route('telegram.login');
+        return redirect()->guest(route('telegram.login'));
     }
 }

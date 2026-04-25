@@ -2,31 +2,32 @@
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Вход через Telegram</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Wishli</title>
 
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 
 <body class="min-h-screen bg-[#E7E3DD] flex items-center justify-center px-5">
-    <div class="w-full max-w-[420px] rounded-[32px] bg-white/80 p-6 text-center shadow-sm">
-        <div class="text-[22px] font-semibold text-[#1F1F1F]">
-            Входим через Telegram
+    <div class="w-full max-w-[420px] rounded-[32px] bg-white/70 p-6 text-center shadow-sm backdrop-blur">
+        <div class="text-[30px] font-semibold tracking-[-0.05em] text-[#171717]">
+            Wishli
         </div>
 
-        <div id="status" class="mt-3 text-[15px] text-[#6B6B6B]">
-            Проверяем данные приложения...
+        <div id="status" class="mt-3 text-[15px] text-[#666]">
+            Входим через Telegram...
         </div>
 
-        <a
-            href="{{ route('dev-login') }}"
-            class="mt-6 hidden rounded-[18px] bg-black px-5 py-3 text-white"
-            id="dev-login"
-        >
-            Dev login
-        </a>
+        @if(app()->environment('local'))
+            <a
+                href="{{ route('dev-login') }}"
+                id="dev-login"
+                class="mt-6 hidden rounded-[22px] bg-black px-6 py-4 text-white"
+            >
+                Dev login
+            </a>
+        @endif
     </div>
 
     <script>
@@ -39,10 +40,10 @@
             if (!tg) {
                 statusEl.textContent = 'Открой приложение через Telegram.';
 
-                @if (app()->environment('local'))
+                if (devLogin) {
                     devLogin.classList.remove('hidden');
                     devLogin.classList.add('inline-block');
-                @endif
+                }
 
                 return;
             }
@@ -51,9 +52,10 @@
             tg.expand();
 
             const initData = tg.initData || '';
+            const startParam = tg.initDataUnsafe?.start_param || '';
 
             if (!initData) {
-                statusEl.textContent = 'Telegram не передал initData. Открой приложение именно из бота.';
+                statusEl.textContent = 'Telegram не передал initData. Открой Mini App из бота.';
                 return;
             }
 
@@ -68,6 +70,7 @@
                     },
                     body: JSON.stringify({
                         init_data: initData,
+                        start_param: startParam,
                     }),
                 });
 
@@ -78,7 +81,9 @@
                     return;
                 }
 
-                window.location.href = data.redirect || '{{ route('page-wishlists') }}';
+                tg.HapticFeedback?.notificationOccurred?.('success');
+
+                window.location.href = data.redirect;
             } catch (e) {
                 statusEl.textContent = 'Ошибка соединения с сервером.';
             }
