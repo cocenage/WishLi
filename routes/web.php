@@ -1,20 +1,13 @@
 <?php
 
-use App\Http\Controllers\TelegramAuthController;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return Auth::check()
-        ? redirect()->route('page-wishlists')
-        : redirect()->route('login');
-})->name('home');
+Route::get('/', fn () => redirect()->route('page-wishlists'))->name('home');
 
 Route::livewire('/login', 'landing')->name('login');
-
-Route::post('/telegram/auth', TelegramAuthController::class)
-    ->name('telegram.auth');
 
 Route::get('/dev-login', function () {
     abort_unless(app()->environment('local'), 404);
@@ -23,7 +16,7 @@ Route::get('/dev-login', function () {
         ['email' => 'dev@example.com'],
         [
             'name' => 'Dev User',
-            'password' => bcrypt('password'),
+            'password' => Hash::make('password'),
             'telegram_id' => 999999999,
             'telegram_username' => 'dev_user',
             'status' => 'approved',
@@ -46,7 +39,7 @@ Route::get('/php-test', function () {
     ];
 });
 
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['tg.auth'])->group(function () {
     Route::livewire('/wishlists', 'page-wishlists')->name('page-wishlists');
     Route::livewire('/wishlists/create', 'page-wishlist-create')->name('page-wishlist-create');
     Route::livewire('/wishlists/{wishlist}', 'page-wishlist-show')->name('page-wishlist-show');
@@ -54,4 +47,4 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('/wishlists/{wishlist}/items/create', 'page-wishlist-item-create')->name('page-wishlist-item-create');
     Route::livewire('/wishlists/{wishlist}/items/{item}/edit', 'page-wishlist-item-edit')->name('page-wishlist-item-edit');
     Route::livewire('/wishlist-invites/{token}', 'page-wishlist-invite')->name('page-wishlist-invite');
-});
+}); 
