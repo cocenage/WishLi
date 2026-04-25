@@ -29,7 +29,7 @@ return new class extends Migration
             $table->string('priority')->default('medium'); // low, medium, high
             $table->boolean('is_hidden')->default(false);
 
-            $table->boolean('is_purchased')->default(false)->after('is_hidden');
+            $table->boolean('is_purchased')->default(false);
             
             $table->timestamps();
         });
