@@ -9,6 +9,14 @@ Route::get('/', function () {
     return redirect()->route('page-wishlists');
 })->name('home');
 
+/**
+ * Нужен Laravel auth middleware, чтобы не падал Route [login] not defined.
+ * В Telegram обычный login не нужен.
+ */
+Route::get('/login', function () {
+    return redirect()->route('page-wishlists');
+})->name('login');
+
 Route::get('/dev-login', function () {
     abort_unless(app()->environment('local'), 404);
 
