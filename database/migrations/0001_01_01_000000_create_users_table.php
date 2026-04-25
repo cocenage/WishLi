@@ -13,10 +13,40 @@ return new class extends Migration
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
+
+            /*
+             |--------------------------------------------------------------------------
+             | Telegram Mini App auth
+             |--------------------------------------------------------------------------
+             */
+
+            $table->unsignedBigInteger('telegram_id')->nullable()->unique();
+            $table->string('telegram_username')->nullable();
+            $table->string('telegram_first_name')->nullable();
+            $table->string('telegram_last_name')->nullable();
+            $table->string('telegram_photo_url')->nullable();
+            $table->timestamp('telegram_last_auth_at')->nullable();
+
+            /*
+             |--------------------------------------------------------------------------
+             | Basic auth fields
+             |--------------------------------------------------------------------------
+             */
+
             $table->string('name');
-            $table->string('email')->unique();
+            $table->string('email')->nullable()->unique();
             $table->timestamp('email_verified_at')->nullable();
-            $table->string('password');
+            $table->string('password')->nullable();
+
+            /*
+             |--------------------------------------------------------------------------
+             | Access/status
+             |--------------------------------------------------------------------------
+             */
+
+            $table->string('status')->default('approved');
+            $table->boolean('is_active')->default(true);
+
             $table->rememberToken();
             $table->timestamps();
         });
