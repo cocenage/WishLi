@@ -10,6 +10,8 @@ class WishlistItemClaim extends Model
     protected $fillable = [
         'wishlist_item_id',
         'user_id',
+        'status',
+        'comment',
     ];
 
     public function item(): BelongsTo

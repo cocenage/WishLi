@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 
 Route::middleware(['auth'])->group(function () {
     Route::livewire('/wishlists', 'page-wishlists')->name('page-wishlists');
@@ -13,6 +14,7 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('/wishlists/{wishlist}/items/{item}/edit', 'page-wishlist-item-edit')->name('page-wishlist-item-edit');
     Route::livewire('/wishlist-invites/{token}', 'page-wishlist-invite')->name('page-wishlist-invite');
 });
+
 Route::get('/php-test', function () {
     return [
         'php_version' => phpversion(),
@@ -23,15 +25,22 @@ Route::get('/php-test', function () {
 Route::get('/dev-login', function () {
     abort_unless(app()->environment('local'), 404);
 
-    $user = User::query()->firstOrCreate(
+    $user = User::query()->updateOrCreate(
         ['email' => 'dev@example.com'],
         [
             'name' => 'Dev User',
             'password' => bcrypt('password'),
+            'telegram_id' => 999999999,
+            'telegram_username' => 'dev_user',
+            'status' => 'approved',
+            'is_active' => true,
+            'approved_at' => now(),
+            'last_login_at' => now(),
         ]
     );
 
     Auth::login($user, true);
+    request()->session()->regenerate();
 
     return redirect()->route('page-wishlists');
 })->name('dev-login');

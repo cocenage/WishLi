@@ -9,43 +9,53 @@ use Illuminate\Support\Facades\Http;
 
 class WishlistTelegramService
 {
-    public function sendMessage(string $text): void
+    public function sendToUser(?User $user, string $text): void
     {
-        $token = config('services.telegram.bot_token');
-        $chatId = config('services.telegram.chat_id');
+        if (! $user?->telegram_id) {
+            return;
+        }
 
-        if (! $token || ! $chatId) {
+        $token = config('services.telegram.bot_token');
+
+        if (! $token) {
             return;
         }
 
         Http::asForm()->post("https://api.telegram.org/bot{$token}/sendMessage", [
-            'chat_id' => $chatId,
+            'chat_id' => $user->telegram_id,
             'text' => $text,
         ]);
     }
 
-    public function notifyWishlistShared(Wishlist $wishlist, User $targetUser): void
+    public function notifyJoinedWishlist(Wishlist $wishlist, User $joinedUser): void
     {
-        $this->sendMessage(
-            "Тебя добавили в вишлист \"{$wishlist->title}\"."
+        $this->sendToUser(
+            $wishlist->owner,
+            "{$joinedUser->name} joined wishlist \"{$wishlist->title}\"."
         );
     }
 
-    public function notifyItemClaimed(WishlistItem $item, User $claimer): void
+    public function notifyClaimed(WishlistItem $item, User $user): void
     {
-        $wishlist = $item->wishlist;
-
-        $this->sendMessage(
-            "{$claimer->name} выбрал подарок \"{$item->title}\" в вишлисте \"{$wishlist->title}\"."
+        $this->sendToUser(
+            $item->wishlist->owner,
+            "{$user->name} joined gift \"{$item->title}\" in \"{$item->wishlist->title}\"."
         );
     }
 
-    public function notifyItemUnclaimed(WishlistItem $item, User $claimer): void
+    public function notifyUnclaimed(WishlistItem $item, User $user): void
     {
-        $wishlist = $item->wishlist;
+        $this->sendToUser(
+            $item->wishlist->owner,
+            "{$user->name} cancelled participation in \"{$item->title}\"."
+        );
+    }
 
-        $this->sendMessage(
-            "{$claimer->name} отказался от подарка \"{$item->title}\" в вишлисте \"{$wishlist->title}\"."
+    public function notifyWishlistClosingTomorrow(Wishlist $wishlist): void
+    {
+        $this->sendToUser(
+            $wishlist->owner,
+            "Wishlist \"{$wishlist->title}\" will close tomorrow."
         );
     }
 }

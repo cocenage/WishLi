@@ -8,6 +8,7 @@ use App\Services\Telegram\TelegramMiniAppUserService;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Symfony\Component\HttpFoundation\Response;
 
 class AuthenticateTelegramMiniApp
@@ -19,31 +20,27 @@ class AuthenticateTelegramMiniApp
 
     public function handle(Request $request, Closure $next): Response
     {
-          if (app()->environment('local') && $request->has('dev_login')) {
-        $user = User::query()->first();
+        if (app()->environment('local') && $request->has('dev_login')) {
+            $user = User::query()->updateOrCreate(
+                ['email' => 'dev@example.com'],
+                [
+                    'name' => 'Dev User',
+                    'password' => Hash::make('password'),
+                    'telegram_id' => 999999999,
+                    'telegram_username' => 'dev_user',
+                    'status' => 'approved',
+                    'is_active' => true,
+                    'approved_at' => now(),
+                    'last_login_at' => now(),
+                ]
+            );
 
-        if (! $user) {
-           $user = \App\Models\User::query()->firstOrCreate(
-        ['email' => 'dev@example.com'],
-        [
-            'name' => 'Dev User',
-            'password' => bcrypt('password'),
-            'telegram_id' => 999999999,
-            'telegram_username' => 'dev_user',
-            'status' => 'approved',
-            'is_active' => true,
-        ]
-    );
+            Auth::login($user, true);
+            $request->session()->regenerate();
+
+            return $next($request);
         }
 
-        Auth::login($user, true);
-
-        return $next($request);
-    }
-
-    if (Auth::check()) {
-        return $next($request);
-    }
         if (Auth::check()) {
             return $next($request);
         }
@@ -74,6 +71,7 @@ class AuthenticateTelegramMiniApp
         $user = $this->telegramMiniAppUserService->findOrCreate($telegramUser);
 
         Auth::login($user, true);
+        $request->session()->regenerate();
 
         return $next($request);
     }

@@ -4,6 +4,7 @@ use App\Models\Wishlist;
 use App\Models\WishlistItem;
 use App\Models\WishlistItemClaim;
 use App\Models\WishlistMember;
+use App\Services\Wishlist\WishlistTelegramService;
 use Illuminate\Support\Str;
 use Livewire\Component;
 
@@ -13,11 +14,13 @@ new class extends Component
 
     public ?int $selectedItemId = null;
     public bool $sheetOpen = false;
+    public bool $claimFormOpen = false;
     public ?string $shareUrl = null;
 
     public string $search = '';
-    public string $priorityFilter = 'all';
-    public string $sort = 'latest';
+    public string $statusFilter = 'all';
+    public string $claimStatus = 'gifting';
+    public string $claimComment = '';
 
     public function mount(Wishlist $wishlist): void
     {
@@ -30,12 +33,7 @@ new class extends Component
         $this->reloadWishlist();
     }
 
-    public function updatedPriorityFilter(): void
-    {
-        $this->reloadWishlist();
-    }
-
-    public function updatedSort(): void
+    public function updatedStatusFilter(): void
     {
         $this->reloadWishlist();
     }
@@ -45,13 +43,11 @@ new class extends Component
         $this->wishlist = $this->wishlist->fresh();
 
         $search = $this->search;
-        $priority = $this->priorityFilter;
-        $sort = $this->sort;
+        $status = $this->statusFilter;
 
         $this->wishlist->load([
             'owner',
-            'memberLinks.user',
-            'items' => function ($query) use ($search, $priority, $sort) {
+            'items' => function ($query) use ($search, $status) {
                 if ($this->wishlist->owner_id !== auth()->id()) {
                     $query->where('is_hidden', false);
                 }
@@ -59,30 +55,26 @@ new class extends Component
                 if ($search !== '') {
                     $query->where(function ($q) use ($search) {
                         $q->where('title', 'like', '%' . $search . '%')
-                            ->orWhere('description', 'like', '%' . $search . '%')
-                            ->orWhere('note', 'like', '%' . $search . '%')
-                            ->orWhere('store_name', 'like', '%' . $search . '%');
+                            ->orWhere('store_name', 'like', '%' . $search . '%')
+                            ->orWhere('note', 'like', '%' . $search . '%');
                     });
                 }
 
-                if ($priority !== 'all') {
-                    $query->where('priority', $priority);
+                if ($status === 'free') {
+                    $query->where('is_purchased', false)
+                        ->whereDoesntHave('claims');
                 }
 
-                match ($sort) {
-                    'price_asc' => $query->orderBy('price'),
-                    'price_desc' => $query->orderByDesc('price'),
-                    'priority' => $query->orderByRaw("
-                        case
-                            when priority = 'high' then 1
-                            when priority = 'medium' then 2
-                            else 3
-                        end
-                    "),
-                    default => $query->latest(),
-                };
+                if ($status === 'claimed') {
+                    $query->where('is_purchased', false)
+                        ->whereHas('claims');
+                }
 
-                $query->with('claims.user');
+                if ($status === 'purchased') {
+                    $query->where('is_purchased', true);
+                }
+
+                $query->with('claims.user')->latest();
             },
         ]);
     }
@@ -91,66 +83,96 @@ new class extends Component
     {
         $this->selectedItemId = $itemId;
         $this->sheetOpen = true;
+        $this->claimFormOpen = false;
+        $this->claimStatus = 'gifting';
+        $this->claimComment = '';
     }
 
     public function closeSheet(): void
     {
         $this->sheetOpen = false;
         $this->selectedItemId = null;
+        $this->claimFormOpen = false;
+        $this->claimStatus = 'gifting';
+        $this->claimComment = '';
     }
 
-    public function isUnavailable(): bool
+    public function openClaimForm(): void
     {
-        return $this->wishlist->is_closed || ($this->wishlist->event_date && $this->wishlist->event_date->isPast());
-    }
-
-    public function typeLabel(): string
-    {
-        return match ($this->wishlist->type) {
-            'birthday' => 'День рождения',
-            'new_year' => 'Новый год',
-            'wedding' => 'Свадьба',
-            'house' => 'Переезд',
-            default => 'Вишлист',
-        };
-    }
-
-    public function claimItem(int $itemId): void
-    {
-        $item = WishlistItem::query()
-            ->with('wishlist', 'claims')
-            ->findOrFail($itemId);
-
-        if ($item->wishlist->owner_id === auth()->id()) {
+        if (! $this->selectedItem) {
             return;
         }
 
-        if ($this->isUnavailable()) {
+        $existing = $this->selectedItem->claims->firstWhere('user_id', auth()->id());
+
+        $this->claimStatus = $existing?->status ?: 'gifting';
+        $this->claimComment = $existing?->comment ?: '';
+        $this->claimFormOpen = true;
+    }
+
+    public function saveClaim(WishlistTelegramService $telegram): void
+    {
+        if (! $this->selectedItem) {
             return;
         }
 
-        if (! $item->wishlist->allow_multi_claim && $item->claims()->exists()) {
+        if ($this->selectedItem->wishlist->owner_id === auth()->id()) {
             return;
         }
 
-        WishlistItemClaim::query()->firstOrCreate([
-            'wishlist_item_id' => $item->id,
-            'user_id' => auth()->id(),
+        if ($this->closed()) {
+            return;
+        }
+
+        if (! $this->selectedItem->wishlist->allow_multi_claim) {
+            $otherClaimExists = $this->selectedItem->claims
+                ->where('user_id', '!=', auth()->id())
+                ->count() > 0;
+
+            if ($otherClaimExists) {
+                return;
+            }
+        }
+
+        $validated = $this->validate([
+            'claimStatus' => ['required', 'in:gifting,contribute,thinking,bought'],
+            'claimComment' => ['nullable', 'string', 'max:255'],
         ]);
 
+        $claim = WishlistItemClaim::query()->updateOrCreate(
+            [
+                'wishlist_item_id' => $this->selectedItem->id,
+                'user_id' => auth()->id(),
+            ],
+            [
+                'status' => $validated['claimStatus'],
+                'comment' => $validated['claimComment'] ?: null,
+            ]
+        );
+
+        $telegram->notifyClaimed($this->selectedItem->fresh('wishlist.owner'), auth()->user());
+
         $this->reloadWishlist();
-        $this->selectedItemId = $itemId;
+        $this->selectedItemId = $this->selectedItem->id;
+        $this->claimFormOpen = false;
     }
 
-    public function unclaimItem(int $itemId): void
+    public function unclaimItem(int $itemId, WishlistTelegramService $telegram): void
     {
+        $item = WishlistItem::query()->with('wishlist.owner')->findOrFail($itemId);
+
         WishlistItemClaim::query()
             ->where('wishlist_item_id', $itemId)
             ->where('user_id', auth()->id())
             ->delete();
 
+        $telegram->notifyUnclaimed($item, auth()->user());
+
         $this->reloadWishlist();
         $this->selectedItemId = $itemId;
+        $this->claimFormOpen = false;
+        $this->claimStatus = 'gifting';
+        $this->claimComment = '';
     }
 
     public function generateInvite(): void
@@ -186,23 +208,89 @@ new class extends Component
         return redirect()->route('page-wishlists');
     }
 
+    public function closed(): bool
+    {
+        return (bool) $this->wishlist->is_closed
+            || ($this->wishlist->event_date && $this->wishlist->event_date->isPast());
+    }
+
+    public function progress(): string
+    {
+        $total = $this->wishlist->items->count();
+
+        if ($total === 0) {
+            return '0/0';
+        }
+
+        $done = $this->wishlist->items
+            ->filter(fn ($item) => $item->is_purchased || $item->claims->count() > 0)
+            ->count();
+
+        return $done . '/' . $total;
+    }
+
+    public function progressPercent(): int
+    {
+        $total = $this->wishlist->items->count();
+
+        if ($total === 0) {
+            return 0;
+        }
+
+        $done = $this->wishlist->items
+            ->filter(fn ($item) => $item->is_purchased || $item->claims->count() > 0)
+            ->count();
+
+        return (int) round(($done / $total) * 100);
+    }
+
     public function statusLabel(WishlistItem $item): string
     {
         if ($item->is_purchased) {
-            return 'Куплено';
+            return 'Purchased';
         }
 
         $count = $item->claims->count();
 
         if ($count === 0) {
-            return 'Никто не выбрал';
+            return 'Free';
         }
 
         if ($count === 1) {
-            return '1 человек хочет подарить';
+            return '1 joined';
         }
 
-        return $count . ' человека хотят подарить';
+        return $count . ' joined';
+    }
+
+    public function cardClass(WishlistItem $item): string
+    {
+        $isMine = $item->claims->where('user_id', auth()->id())->count() > 0;
+
+        if ($item->is_purchased) {
+            return 'bg-[#DDF4E4]';
+        }
+
+        if ($isMine) {
+            return 'bg-[#111111] text-white';
+        }
+
+        if ($item->claims->count() > 0) {
+            return 'bg-[#F3EE7A]';
+        }
+
+        return 'bg-white';
+    }
+
+    public function claimStatusLabel(?string $status): string
+    {
+        return match ($status) {
+            'gifting' => 'Gift myself',
+            'contribute' => 'Contribute',
+            'thinking' => 'Thinking',
+            'bought' => 'Already bought',
+            default => 'Joined',
+        };
     }
 
     public function getSelectedItemProperty(): ?WishlistItem
@@ -213,224 +301,183 @@ new class extends Component
 
         return $this->wishlist->items->firstWhere('id', $this->selectedItemId);
     }
+
+    public function getUserClaimProperty(): ?WishlistItemClaim
+    {
+        if (! $this->selectedItem) {
+            return null;
+        }
+
+        return $this->selectedItem->claims->firstWhere('user_id', auth()->id());
+    }
 };
 ?>
 
 <div
     x-data="{ sheetOpen: @entangle('sheetOpen') }"
-    class="min-h-screen bg-[#f4f7fb] pb-24"
+    class="min-h-screen bg-[#F3F0E8] pb-24 text-[#111111]"
 >
     <div class="px-4 pt-4">
-        <div class="rounded-[28px] bg-white p-5 shadow-sm">
-            <div class="flex items-start justify-between gap-4">
-                <div>
-                    <h1 class="text-2xl font-semibold text-[#1f2a37]">
-                        {{ $wishlist->emoji ?: '🎁' }} {{ $wishlist->title }}
-                    </h1>
-
-                    <div class="mt-2 flex flex-wrap gap-2">
-                        <span class="inline-flex rounded-full bg-[#eef2f7] px-2 py-1 text-[11px] font-medium text-[#1f2a37]">
-                            {{ $this->typeLabel() }}
-                        </span>
-
-                        @if($this->isUnavailable())
-                            <span class="inline-flex rounded-full bg-[#fee2e2] px-2 py-1 text-[11px] font-medium text-[#991b1b]">
-                                Закрыт
-                            </span>
-                        @endif
-                    </div>
-
-                    @if($wishlist->description)
-                        <p class="mt-2 text-sm text-[#6b7280]">
-                            {{ $wishlist->description }}
-                        </p>
-                    @endif
-
-                    <div class="mt-3 flex flex-wrap gap-2 text-xs text-[#6b7280]">
-                        <span>{{ $wishlist->items->count() }} товаров</span>
-                        <span>•</span>
-                        <span>{{ $wishlist->memberLinks->where('status', 'accepted')->count() }} участников</span>
-
-                        @if($wishlist->event_date)
-                            <span>•</span>
-                            <span>до {{ $wishlist->event_date->format('d.m.Y') }}</span>
-                        @endif
-                    </div>
-                </div>
+        <div class="rounded-[32px] bg-white p-5">
+            <div class="text-[12px] uppercase tracking-[0.18em] text-[#8B8B8B]">
+                wishlist
             </div>
 
-            @if($this->isUnavailable())
-                <div class="mt-4 rounded-[24px] bg-[#fee2e2] px-4 py-4 text-sm text-[#991b1b]">
-                    Этот вишлист закрыт. Новые подарки выбрать нельзя.
-                </div>
-            @endif
+            <h1 class="mt-2 text-[44px] font-semibold leading-[0.9]">
+                {{ $wishlist->title }}
+            </h1>
+
+            <div class="mt-3 flex items-center gap-2 text-sm text-[#666666]">
+                <span>{{ $this->progress() }}</span>
+
+                @if($wishlist->event_date)
+                    <span>•</span>
+                    <span>{{ $wishlist->event_date->format('d.m') }}</span>
+                @endif
+
+                @if($this->closed())
+                    <span>•</span>
+                    <span>Closed</span>
+                @endif
+            </div>
+
+            <div class="mt-4 h-2 w-full rounded-full bg-[#ECE7DD]">
+                <div
+                    class="h-2 rounded-full bg-[#111111]"
+                    style="width: {{ $this->progressPercent() }}%;"
+                ></div>
+            </div>
 
             <div class="mt-4 flex gap-2">
                 <a
                     href="{{ route('page-wishlist-item-create', ['wishlist' => $wishlist->id]) }}"
-                    class="flex-1 rounded-2xl bg-[#1f2a37] px-4 py-3 text-center text-sm font-medium text-white"
+                    class="flex-1 rounded-[24px] bg-[#111111] px-4 py-4 text-center text-sm font-medium text-white"
                 >
-                    Добавить подарок
+                    Add gift
                 </a>
 
                 @if($wishlist->owner_id === auth()->id())
                     <button
                         type="button"
                         wire:click="generateInvite"
-                        class="rounded-2xl bg-[#eef2f7] px-4 py-3 text-sm font-medium text-[#1f2a37]"
+                        class="rounded-[24px] bg-[#ECE7DD] px-4 py-4 text-sm font-medium text-[#111111]"
                     >
-                        Поделиться
+                        Share
                     </button>
 
                     <a
                         href="{{ route('page-wishlist-edit', ['wishlist' => $wishlist->id]) }}"
-                        class="rounded-2xl bg-[#eef2f7] px-4 py-3 text-sm font-medium text-[#1f2a37]"
+                        class="rounded-[24px] bg-[#ECE7DD] px-4 py-4 text-sm font-medium text-[#111111]"
                     >
-                        Изм.
+                        Edit
                     </a>
                 @else
                     <button
                         wire:click="leaveWishlist"
-                        class="rounded-2xl bg-[#eef2f7] px-4 py-3 text-sm font-medium text-[#1f2a37]"
+                        class="rounded-[24px] bg-[#ECE7DD] px-4 py-4 text-sm font-medium text-[#111111]"
                     >
-                        Выйти
+                        Leave
                     </button>
                 @endif
             </div>
 
             @if($shareUrl)
                 <div class="mt-3 flex gap-2">
-                    <div class="min-w-0 flex-1 break-all rounded-2xl bg-[#eef2f7] px-4 py-3 text-sm text-[#1f2a37]">
+                    <div class="min-w-0 flex-1 break-all rounded-[24px] bg-[#ECE7DD] px-4 py-3 text-sm text-[#111111]">
                         {{ $shareUrl }}
                     </div>
 
                     <button
                         type="button"
                         onclick="navigator.clipboard.writeText('{{ $shareUrl }}')"
-                        class="rounded-2xl bg-[#eef2f7] px-4 py-3 text-sm font-medium text-[#1f2a37]"
+                        class="rounded-[24px] bg-[#ECE7DD] px-4 py-3 text-sm font-medium text-[#111111]"
                     >
-                        Копировать
+                        Copy
                     </button>
-                </div>
-            @endif
-
-            @if($wishlist->memberLinks->where('status', 'accepted')->count())
-                <div class="mt-4">
-                    <div class="text-xs text-[#6b7280]">Участники</div>
-
-                    <div class="mt-2 flex flex-wrap gap-2">
-                        @foreach($wishlist->memberLinks->where('status', 'accepted') as $member)
-                            <div class="inline-flex items-center gap-2 rounded-full bg-[#eef2f7] px-3 py-2 text-xs text-[#1f2a37]">
-                                <div class="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-[#1f2a37]">
-                                    {{ mb_substr($member->user?->name ?? '?', 0, 1) }}
-                                </div>
-                                <span>{{ $member->user?->name }}</span>
-                            </div>
-                        @endforeach
-                    </div>
                 </div>
             @endif
         </div>
     </div>
 
     <div class="mt-4 px-4">
-        <div class="space-y-3 rounded-[24px] bg-white p-4 shadow-sm">
+        <div class="rounded-[28px] bg-white p-4">
             <input
                 wire:model.live.debounce.300ms="search"
                 type="text"
-                placeholder="Поиск по подаркам"
-                class="w-full rounded-2xl border-0 bg-[#eef2f7] px-4 py-3 text-sm"
+                placeholder="Search"
+                class="w-full rounded-[20px] border-0 bg-[#F3F0E8] px-4 py-3 text-sm"
             >
 
-            <div class="grid grid-cols-2 gap-3">
-                <select
-                    wire:model.live="priorityFilter"
-                    class="w-full rounded-2xl border-0 bg-[#eef2f7] px-4 py-3 text-sm"
+            <div class="mt-3 flex gap-2 overflow-x-auto">
+                <button
+                    wire:click="$set('statusFilter', 'all')"
+                    class="whitespace-nowrap rounded-full px-4 py-2 text-sm {{ $statusFilter === 'all' ? 'bg-[#111111] text-white' : 'bg-[#ECE7DD] text-[#111111]' }}"
                 >
-                    <option value="all">Все приоритеты</option>
-                    <option value="high">Высокий</option>
-                    <option value="medium">Средний</option>
-                    <option value="low">Низкий</option>
-                </select>
+                    All
+                </button>
 
-                <select
-                    wire:model.live="sort"
-                    class="w-full rounded-2xl border-0 bg-[#eef2f7] px-4 py-3 text-sm"
+                <button
+                    wire:click="$set('statusFilter', 'free')"
+                    class="whitespace-nowrap rounded-full px-4 py-2 text-sm {{ $statusFilter === 'free' ? 'bg-[#111111] text-white' : 'bg-[#ECE7DD] text-[#111111]' }}"
                 >
-                    <option value="latest">Сначала новые</option>
-                    <option value="price_asc">Сначала дешевле</option>
-                    <option value="price_desc">Сначала дороже</option>
-                    <option value="priority">По приоритету</option>
-                </select>
+                    Free
+                </button>
+
+                <button
+                    wire:click="$set('statusFilter', 'claimed')"
+                    class="whitespace-nowrap rounded-full px-4 py-2 text-sm {{ $statusFilter === 'claimed' ? 'bg-[#111111] text-white' : 'bg-[#ECE7DD] text-[#111111]' }}"
+                >
+                    Joined
+                </button>
+
+                <button
+                    wire:click="$set('statusFilter', 'purchased')"
+                    class="whitespace-nowrap rounded-full px-4 py-2 text-sm {{ $statusFilter === 'purchased' ? 'bg-[#111111] text-white' : 'bg-[#ECE7DD] text-[#111111]' }}"
+                >
+                    Purchased
+                </button>
             </div>
         </div>
     </div>
 
-    <div class="mt-5 space-y-3 px-4">
+    <div class="mt-4 space-y-3 px-4">
         @forelse($wishlist->items as $item)
             <button
                 wire:click="openItem({{ $item->id }})"
-                class="w-full rounded-[24px] bg-white p-4 text-left shadow-sm"
+                class="w-full rounded-[30px] p-4 text-left {{ $this->cardClass($item) }}"
             >
                 <div class="flex gap-4">
-                    <div class="h-24 w-24 shrink-0 overflow-hidden rounded-[18px] bg-[#eef2f7]">
+                    <div class="h-24 w-24 shrink-0 overflow-hidden rounded-[20px] bg-black/5">
                         @if($item->image_url)
                             <img src="{{ $item->image_url }}" alt="" class="h-full w-full object-cover">
                         @endif
                     </div>
 
                     <div class="min-w-0 flex-1">
-                        <h2 class="line-clamp-2 text-sm font-semibold text-[#1f2a37]">
+                        <div class="line-clamp-2 text-[30px] font-semibold leading-[0.95]">
                             {{ $item->title }}
-                        </h2>
+                        </div>
 
                         @if($item->price)
-                            <div class="mt-2 text-sm font-medium text-[#111827]">
+                            <div class="mt-2 text-sm {{ $item->claims->where('user_id', auth()->id())->count() > 0 && ! $item->is_purchased ? 'text-white/70' : 'text-[#666666]' }}">
                                 {{ number_format((float) $item->price, 0, ',', ' ') }} {{ $item->currency }}
                             </div>
                         @endif
 
-                        @if($item->store_name)
-                            <div class="mt-2 text-xs text-[#6b7280]">
-                                {{ $item->store_name }}
-                            </div>
-                        @endif
-
-                        <div class="mt-2 flex items-center gap-2">
-                            @if($item->priority === 'high')
-                                <span class="inline-flex rounded-full bg-[#fee2e2] px-2 py-1 text-[11px] font-medium text-[#991b1b]">
-                                    Очень хочу
-                                </span>
-                            @elseif($item->priority === 'medium')
-                                <span class="inline-flex rounded-full bg-[#fef3c7] px-2 py-1 text-[11px] font-medium text-[#92400e]">
-                                    Средний
-                                </span>
-                            @else
-                                <span class="inline-flex rounded-full bg-[#e5e7eb] px-2 py-1 text-[11px] font-medium text-[#374151]">
-                                    Низкий
-                                </span>
-                            @endif
-
-                            @if($item->is_purchased)
-                                <span class="inline-flex rounded-full bg-[#dcfce7] px-2 py-1 text-[11px] font-medium text-[#166534]">
-                                    Куплено
-                                </span>
-                            @endif
-                        </div>
-
-                        <div class="mt-3 text-xs text-[#6b7280]">
+                        <div class="mt-3 text-xs {{ $item->claims->where('user_id', auth()->id())->count() > 0 && ! $item->is_purchased ? 'text-white/70' : 'text-[#777777]' }}">
                             {{ $this->statusLabel($item) }}
                         </div>
                     </div>
                 </div>
             </button>
         @empty
-            <div class="rounded-[24px] bg-white p-8 text-center shadow-sm">
-                <div class="text-4xl">✨</div>
-                <h3 class="mt-3 text-base font-semibold text-[#1f2a37]">Пока нет подарков</h3>
-                <p class="mt-2 text-sm text-[#6b7280]">
-                    Добавь первый подарок, чтобы другие могли его выбрать.
-                </p>
+            <div class="rounded-[30px] bg-white p-8 text-center">
+                <div class="text-[34px] font-semibold leading-none">
+                    Empty
+                </div>
+                <div class="mt-2 text-sm text-[#7A7A7A]">
+                    Add first gift
+                </div>
             </div>
         @endforelse
     </div>
@@ -438,7 +485,7 @@ new class extends Component
     <div
         x-show="sheetOpen"
         x-transition.opacity
-        class="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+        class="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
         @click="$wire.closeSheet()"
     ></div>
 
@@ -452,126 +499,151 @@ new class extends Component
         x-transition:leave-end="translate-y-full"
         class="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[768px]"
     >
-        <div class="rounded-t-[32px] bg-white p-5 shadow-2xl">
-            <div class="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#dbe3ec]"></div>
+        <div class="rounded-t-[36px] bg-white p-5 shadow-2xl">
+            <div class="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#DDD7CB]"></div>
 
             @if($this->selectedItem)
-                <div class="h-52 overflow-hidden rounded-[24px] bg-[#eef2f7]">
+                <div class="h-56 overflow-hidden rounded-[24px] bg-[#F3F0E8]">
                     @if($this->selectedItem->image_url)
                         <img src="{{ $this->selectedItem->image_url }}" alt="" class="h-full w-full object-cover">
                     @endif
                 </div>
 
-                <div class="mt-4 flex items-start justify-between gap-3">
-                    <div>
-                        <h3 class="text-lg font-semibold text-[#1f2a37]">
-                            {{ $this->selectedItem->title }}
-                        </h3>
-
-                        @if($this->selectedItem->store_name)
-                            <div class="mt-1 text-sm text-[#6b7280]">
-                                {{ $this->selectedItem->store_name }}
-                            </div>
-                        @endif
-                    </div>
-
-                    @if($wishlist->owner_id === auth()->id() || $this->selectedItem->created_by === auth()->id())
-                        <a
-                            href="{{ route('page-wishlist-item-edit', ['wishlist' => $wishlist->id, 'item' => $this->selectedItem->id]) }}"
-                            class="rounded-2xl bg-[#eef2f7] px-3 py-2 text-xs font-medium text-[#1f2a37]"
-                        >
-                            Изменить
-                        </a>
-                    @endif
+                <div class="mt-4 text-[34px] font-semibold leading-[0.95]">
+                    {{ $this->selectedItem->title }}
                 </div>
 
                 @if($this->selectedItem->price)
-                    <div class="mt-3 text-base font-medium text-[#111827]">
+                    <div class="mt-2 text-sm text-[#666666]">
                         {{ number_format((float) $this->selectedItem->price, 0, ',', ' ') }} {{ $this->selectedItem->currency }}
                     </div>
                 @endif
 
-                <div class="mt-3 flex flex-wrap gap-2">
-                    @if($this->selectedItem->priority === 'high')
-                        <span class="inline-flex rounded-full bg-[#fee2e2] px-2 py-1 text-[11px] font-medium text-[#991b1b]">
-                            Очень хочу
-                        </span>
-                    @elseif($this->selectedItem->priority === 'medium')
-                        <span class="inline-flex rounded-full bg-[#fef3c7] px-2 py-1 text-[11px] font-medium text-[#92400e]">
-                            Средний приоритет
-                        </span>
-                    @else
-                        <span class="inline-flex rounded-full bg-[#e5e7eb] px-2 py-1 text-[11px] font-medium text-[#374151]">
-                            Низкий приоритет
-                        </span>
-                    @endif
-
-                    @if($this->selectedItem->is_purchased)
-                        <span class="inline-flex rounded-full bg-[#dcfce7] px-2 py-1 text-[11px] font-medium text-[#166534]">
-                            Куплено
-                        </span>
-                    @endif
-                </div>
-
-                @if($this->selectedItem->description)
-                    <p class="mt-4 text-sm text-[#6b7280]">
-                        {{ $this->selectedItem->description }}
-                    </p>
-                @endif
-
                 @if($this->selectedItem->note)
-                    <div class="mt-4 rounded-2xl bg-[#eef2f7] px-4 py-3 text-sm text-[#1f2a37]">
+                    <div class="mt-4 text-sm text-[#666666]">
                         {{ $this->selectedItem->note }}
                     </div>
                 @endif
 
-                <div class="mt-4 text-sm text-[#6b7280]">
+                <div class="mt-4 text-sm text-[#777777]">
                     {{ $this->statusLabel($this->selectedItem) }}
                 </div>
 
-                @if($this->selectedItem->claims->count())
-                    @if($wishlist->hide_claimers && $wishlist->owner_id !== auth()->id())
-                        <div class="mt-2 text-sm text-[#6b7280]">
-                            Кто именно выбрал подарок скрыто.
-                        </div>
-                    @else
-                        <div class="mt-2 flex flex-wrap gap-2">
-                            @foreach($this->selectedItem->claims as $claim)
-                                <div class="rounded-full bg-[#eef2f7] px-3 py-1 text-xs text-[#1f2a37]">
+                @if(! $wishlist->hide_claimers && $this->selectedItem->claims->count())
+                    <div class="mt-3 space-y-2">
+                        @foreach($this->selectedItem->claims as $claim)
+                            <div class="rounded-[18px] bg-[#F3F0E8] px-4 py-3">
+                                <div class="text-sm font-medium text-[#111111]">
                                     {{ $claim->user?->name }}
                                 </div>
-                            @endforeach
-                        </div>
-                    @endif
+
+                                <div class="mt-1 text-xs text-[#777777]">
+                                    {{ $this->claimStatusLabel($claim->status) }}
+                                </div>
+
+                                @if($claim->comment)
+                                    <div class="mt-1 text-xs text-[#777777]">
+                                        {{ $claim->comment }}
+                                    </div>
+                                @endif
+                            </div>
+                        @endforeach
+                    </div>
                 @endif
 
-                <div class="mt-5 flex gap-2">
-                    @if(! $this->isUnavailable() && $wishlist->owner_id !== auth()->id())
-                        @if($this->selectedItem->claims->where('user_id', auth()->id())->count())
-                            <button
-                                wire:click="unclaimItem({{ $this->selectedItem->id }})"
-                                class="flex-1 rounded-2xl bg-[#eef2f7] px-4 py-3 text-sm font-medium text-[#1f2a37]"
-                            >
-                                Ты участвуешь
-                            </button>
-                        @else
-                            <button
-                                wire:click="claimItem({{ $this->selectedItem->id }})"
-                                class="flex-1 rounded-2xl bg-[#1f2a37] px-4 py-3 text-sm font-medium text-white"
-                            >
-                                Подарить
-                            </button>
-                        @endif
-                    @endif
+                <div class="mt-6">
+                    @if($wishlist->owner_id === auth()->id())
+                        <div class="rounded-[24px] bg-[#111111] px-4 py-4 text-sm text-white/70">
+                            This is your item
+                        </div>
+                    @elseif($this->closed())
+                        <div class="rounded-[24px] bg-[#111111] px-4 py-4 text-sm text-white/70">
+                            Wishlist is closed
+                        </div>
+                    @else
+                        @if(! $this->userClaim)
+                            @if(! $claimFormOpen)
+                                <div class="flex gap-2">
+                                    <button
+                                        wire:click="openClaimForm"
+                                        class="flex-1 rounded-[24px] bg-[#111111] px-4 py-4 text-sm font-medium text-white"
+                                    >
+                                        Join gift
+                                    </button>
 
-                    @if($this->selectedItem->url)
-                        <a
-                            href="{{ $this->selectedItem->url }}"
-                            target="_blank"
-                            class="rounded-2xl bg-[#eef2f7] px-4 py-3 text-sm font-medium text-[#1f2a37]"
-                        >
-                            Открыть
-                        </a>
+                                    @if($this->selectedItem->url)
+                                        <a
+                                            href="{{ $this->selectedItem->url }}"
+                                            target="_blank"
+                                            class="rounded-[24px] bg-[#ECE7DD] px-4 py-4 text-sm font-medium text-[#111111]"
+                                        >
+                                            Open
+                                        </a>
+                                    @endif
+                                </div>
+                            @else
+                                <div class="space-y-3 rounded-[24px] bg-[#111111] p-4">
+                                    <select
+                                        wire:model.defer="claimStatus"
+                                        class="w-full rounded-[18px] border-0 bg-white/10 px-4 py-3 text-sm text-white"
+                                    >
+                                        <option value="gifting">Gift myself</option>
+                                        <option value="contribute">Contribute</option>
+                                        <option value="thinking">Thinking</option>
+                                        <option value="bought">Already bought</option>
+                                    </select>
+
+                                    <textarea
+                                        wire:model.defer="claimComment"
+                                        rows="3"
+                                        placeholder="Comment"
+                                        class="w-full rounded-[18px] border-0 bg-white/10 px-4 py-3 text-sm text-white placeholder:text-white/40"
+                                    ></textarea>
+
+                                    <div class="flex gap-2">
+                                        <button
+                                            wire:click="saveClaim"
+                                            class="flex-1 rounded-[18px] bg-[#F3EE7A] px-4 py-3 text-sm font-medium text-[#111111]"
+                                        >
+                                            Save
+                                        </button>
+
+                                        <button
+                                            wire:click="$set('claimFormOpen', false)"
+                                            class="rounded-[18px] bg-white/10 px-4 py-3 text-sm font-medium text-white"
+                                        >
+                                            Back
+                                        </button>
+                                    </div>
+                                </div>
+                            @endif
+                        @else
+                            <div class="flex gap-2">
+                                <button
+                                    wire:click="openClaimForm"
+                                    class="flex-1 rounded-[24px] bg-[#111111] px-4 py-4 text-sm font-medium text-white"
+                                >
+                                    Edit
+                                </button>
+
+                                <button
+                                    wire:click="unclaimItem({{ $this->selectedItem->id }})"
+                                    class="rounded-[24px] bg-[#ECE7DD] px-4 py-4 text-sm font-medium text-[#111111]"
+                                >
+                                    Cancel
+                                </button>
+
+                                @if($this->selectedItem->url)
+                                    <a
+                                        href="{{ $this->selectedItem->url }}"
+                                        target="_blank"
+                                        class="rounded-[24px] bg-[#ECE7DD] px-4 py-4 text-sm font-medium text-[#111111]"
+                                    >
+                                        Open
+                                    </a>
+                                @endif
+                            </div>
+                        @endif
                     @endif
                 </div>
             @endif
@@ -582,7 +654,7 @@ new class extends Component
 <script>
     document.addEventListener('livewire:init', () => {
         Livewire.on('wishlist-share-ready', ({ url, title }) => {
-            const text = encodeURIComponent(`Присоединяйся к моему вишлисту: ${title}`);
+            const text = encodeURIComponent(`Join my wishlist: ${title}`);
             const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${text}`;
 
             if (window.Telegram?.WebApp?.openTelegramLink) {
