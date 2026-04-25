@@ -20,6 +20,10 @@ class AuthenticateTelegramMiniApp
 
     public function handle(Request $request, Closure $next): Response
     {
+        if (Auth::check()) {
+            return $next($request);
+        }
+
         if (app()->environment('local') && $request->has('dev_login')) {
             $user = User::query()->updateOrCreate(
                 ['email' => 'dev@example.com'],
@@ -38,10 +42,6 @@ class AuthenticateTelegramMiniApp
             Auth::login($user, true);
             $request->session()->regenerate();
 
-            return $next($request);
-        }
-
-        if (Auth::check()) {
             return $next($request);
         }
 

@@ -10,13 +10,16 @@ Route::get('/', function () {
 })->name('home');
 
 /**
- * Нужен Laravel auth middleware, чтобы не падал Route [login] not defined.
- * В Telegram обычный login не нужен.
+ * Нужен только чтобы Laravel auth middleware не падал Route [login] not defined.
+ * Вход в проде — только через Telegram Mini App.
  */
 Route::get('/login', function () {
-    return redirect()->route('page-wishlists');
+    abort(403, 'Открой приложение через Telegram.');
 })->name('login');
 
+/**
+ * Только локально.
+ */
 Route::get('/dev-login', function () {
     abort_unless(app()->environment('local'), 404);
 
@@ -40,16 +43,47 @@ Route::get('/dev-login', function () {
     return redirect()->route('page-wishlists');
 })->name('dev-login');
 
+Route::get('/php-test', function () {
+    return [
+        'php_version' => phpversion(),
+        'binary' => PHP_BINARY,
+        'env' => app()->environment(),
+        'auth' => auth()->check(),
+        'user_id' => auth()->id(),
+    ];
+});
+
+/**
+ * Локально — обычная сессия.
+ * На проде — Telegram initData.
+ */
 $wishliMiddleware = app()->environment('local')
     ? ['auth']
     : ['tg.auth'];
 
 Route::middleware($wishliMiddleware)->group(function () {
-    Route::livewire('/wishlists', 'page-wishlists')->name('page-wishlists');
-    Route::livewire('/wishlists/create', 'page-wishlist-create')->name('page-wishlist-create');
-    Route::livewire('/wishlists/{wishlist}', 'page-wishlist-show')->name('page-wishlist-show');
-    Route::livewire('/wishlists/{wishlist}/edit', 'page-wishlist-edit')->name('page-wishlist-edit');
-    Route::livewire('/wishlists/{wishlist}/items/create', 'page-wishlist-item-create')->name('page-wishlist-item-create');
-    Route::livewire('/wishlists/{wishlist}/items/{item}/edit', 'page-wishlist-item-edit')->name('page-wishlist-item-edit');
-    Route::livewire('/wishlist-invites/{token}', 'page-wishlist-invite')->name('page-wishlist-invite');
+    Route::livewire('/wishlists', 'page-wishlists')
+        ->name('page-wishlists');
+
+    Route::livewire('/wishlists/create', 'page-wishlist-create')
+        ->name('page-wishlist-create');
+
+    Route::livewire('/wishlists/{wishlist}', 'page-wishlist-show')
+        ->name('page-wishlist-show');
+
+    Route::livewire('/wishlists/{wishlist}/edit', 'page-wishlist-edit')
+        ->name('page-wishlist-edit');
+
+    Route::livewire('/wishlists/{wishlist}/items/create', 'page-wishlist-item-create')
+        ->name('page-wishlist-item-create');
+
+    Route::livewire('/wishlists/{wishlist}/items/{item}/edit', 'page-wishlist-item-edit')
+        ->name('page-wishlist-item-edit');
+
+    Route::livewire('/wishlist-invites/{token}', 'page-wishlist-invite')
+        ->name('page-wishlist-invite');
+});
+
+Route::fallback(function () {
+    return redirect()->route('page-wishlists');
 });
