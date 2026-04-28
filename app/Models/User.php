@@ -2,48 +2,61 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Database\Factories\UserFactory;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Hidden;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
-    /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use Notifiable;
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
+    protected $fillable = [
+        'telegram_id',
+        'telegram_username',
+        'telegram_first_name',
+        'telegram_last_name',
+        'telegram_photo_url',
+        'telegram_last_auth_at',
+        'name',
+        'email',
+        'password',
+        'role',
+        'status',
+        'is_active',
+        'approved_at',
+    ];
+
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
+            'telegram_last_auth_at' => 'datetime',
+            'approved_at' => 'datetime',
+            'is_active' => 'boolean',
             'password' => 'hashed',
         ];
     }
 
     public function ownedWishlists()
     {
-        return $this->hasMany(\App\Models\Wishlist::class, 'owner_id');
+        return $this->hasMany(Wishlist::class, 'owner_id');
     }
 
     public function wishlistMemberships()
     {
-        return $this->hasMany(\App\Models\WishlistMember::class);
+        return $this->hasMany(WishlistMember::class);
     }
 
-    public function wishlists()
+    public function notificationSettings()
     {
-        return $this->belongsToMany(\App\Models\Wishlist::class, 'wishlist_members')
-            ->withPivot(['role', 'status'])
-            ->withTimestamps();
+        return $this->hasOne(UserNotificationSetting::class);
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
     }
 }

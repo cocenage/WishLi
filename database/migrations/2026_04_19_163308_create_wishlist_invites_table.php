@@ -11,8 +11,14 @@ return new class extends Migration
         Schema::create('wishlist_invites', function (Blueprint $table) {
             $table->id();
 
-            $table->foreignId('wishlist_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('wishlist_id')
+                ->constrained()
+                ->cascadeOnDelete();
+
+            $table->foreignId('created_by')
+                ->nullable()
+                ->constrained('users')
+                ->nullOnDelete();
 
             $table->string('token')->unique();
 
@@ -20,6 +26,8 @@ return new class extends Migration
             $table->boolean('is_active')->default(true);
 
             $table->timestamps();
+
+            $table->index(['wishlist_id', 'is_active']);
         });
     }
 

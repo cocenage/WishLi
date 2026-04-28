@@ -3,8 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class WishlistItem extends Model
 {
@@ -16,64 +14,56 @@ class WishlistItem extends Model
         'url',
         'store_name',
         'image_url',
+        'image_path',
         'price',
         'currency',
-        'note',
+        'category',
         'priority',
-        'is_hidden',
-        'is_purchased',
+        'status',
+        'note',
+        'sort_order',
     ];
 
     protected function casts(): array
     {
         return [
             'price' => 'decimal:2',
-            'is_hidden' => 'boolean',
-            'is_purchased' => 'boolean',
         ];
     }
 
-    public function wishlist(): BelongsTo
+    public function wishlist()
     {
         return $this->belongsTo(Wishlist::class);
     }
 
-    public function creator(): BelongsTo
+    public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    public function claims(): HasMany
+    public function claims()
     {
         return $this->hasMany(WishlistItemClaim::class);
     }
 
-    public function getClaimsCountAttribute(): int
+    public function activeClaims()
     {
-        return $this->claims->count();
+        return $this->hasMany(WishlistItemClaim::class)
+            ->whereIn('status', ['reserved', 'contribute', 'thinking', 'bought']);
     }
 
-    public function isClaimedBy(?User $user): bool
+    public function isHidden(): bool
     {
-        if (! $user) {
-            return false;
-        }
-
-        return $this->claims()->where('user_id', $user->id)->exists();
+        return $this->status === 'hidden';
     }
 
-    public function statusLabel(): string
-{
-    if ($this->is_purchased) {
-        return 'Куплено';
+    public function isPurchased(): bool
+    {
+        return $this->status === 'purchased' || $this->claims()->where('status', 'bought')->exists();
     }
 
-    if ($this->claims()->count() > 0) {
-        return $this->claims()->count() === 1
-            ? '1 человек хочет подарить'
-            : $this->claims()->count() . ' человека хотят подарить';
+    public function isReserved(): bool
+    {
+        return $this->claims()->exists();
     }
-
-    return 'Никто не выбрал';
-}
 }

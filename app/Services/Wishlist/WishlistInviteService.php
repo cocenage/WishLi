@@ -27,9 +27,9 @@ class WishlistInviteService
         ]);
     }
 
-    public function join(WishlistInvite $invite, User $user): void
+    public function join(WishlistInvite $invite, User $user): bool
     {
-        WishlistMember::query()->firstOrCreate(
+        $member = WishlistMember::query()->firstOrCreate(
             [
                 'wishlist_id' => $invite->wishlist_id,
                 'user_id' => $user->id,
@@ -39,12 +39,18 @@ class WishlistInviteService
                 'status' => 'accepted',
             ]
         );
+
+        return $member->wasRecentlyCreated;
     }
 
-    public function deactivate(WishlistInvite $invite): void
+    public function buildTelegramStartUrl(WishlistInvite $invite): string
     {
-        $invite->update([
-            'is_active' => false,
-        ]);
+        $botUsername = config('services.telegram.bot_username');
+
+        if ($botUsername) {
+            return "https://t.me/{$botUsername}/app?startapp=invite_{$invite->token}";
+        }
+
+        return route('page-wishlist-invite', ['token' => $invite->token]);
     }
 }

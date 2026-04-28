@@ -12,7 +12,7 @@ class TelegramAuthController extends Controller
 {
     public function __construct(
         protected TelegramMiniAppAuthService $telegramAuthService,
-        protected TelegramMiniAppUserService $telegramMiniAppUserService,
+        protected TelegramMiniAppUserService $telegramUserService,
     ) {}
 
     public function __invoke(Request $request): JsonResponse
@@ -23,19 +23,19 @@ class TelegramAuthController extends Controller
         if (! $initData) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Telegram init data missing.',
+                'message' => 'Telegram initData не передан.',
             ], 403);
         }
 
         $validated = $this->telegramAuthService->validate(
-            $initData,
-            (string) config('services.telegram.bot_token')
+            initData: $initData,
+            botToken: (string) config('services.telegram.bot_token')
         );
 
         if (! $validated) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Telegram init data invalid.',
+                'message' => 'Telegram initData не прошёл проверку.',
             ], 403);
         }
 
@@ -44,11 +44,18 @@ class TelegramAuthController extends Controller
         if (! $telegramUser || ! isset($telegramUser['id'])) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Telegram user missing.',
+                'message' => 'Telegram не передал пользователя.',
             ], 403);
         }
 
-        $user = $this->telegramMiniAppUserService->findOrCreate($telegramUser);
+        $user = $this->telegramUserService->findOrCreate($telegramUser);
+
+        if (! $user->is_active || $user->status !== 'approved') {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Доступ к приложению ограничен.',
+            ], 403);
+        }
 
         Auth::login($user, true);
         $request->session()->regenerate();
@@ -65,14 +72,18 @@ class TelegramAuthController extends Controller
             return route('page-wishlists');
         }
 
+        if ($startParam === 'create') {
+            return route('page-wishlist-create');
+        }
+
+        if ($startParam === 'notifications') {
+            return route('page-notification-settings');
+        }
+
         if (str_starts_with($startParam, 'invite_')) {
             return route('page-wishlist-invite', [
                 'token' => substr($startParam, strlen('invite_')),
             ]);
-        }
-
-        if ($startParam === 'create') {
-            return route('page-wishlist-create');
         }
 
         if (str_starts_with($startParam, 'wishlist_')) {

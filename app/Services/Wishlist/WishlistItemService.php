@@ -19,11 +19,13 @@ class WishlistItemService
             'url' => $data['url'] ?? null,
             'store_name' => $data['store_name'] ?? null,
             'image_url' => $data['image_url'] ?? null,
+            'image_path' => $data['image_path'] ?? null,
             'price' => $data['price'] ?? null,
             'currency' => $data['currency'] ?? null,
-            'note' => $data['note'] ?? null,
+            'category' => $data['category'] ?? null,
             'priority' => $data['priority'] ?? 'medium',
-            'is_hidden' => (bool) ($data['is_hidden'] ?? false),
+            'status' => $data['status'] ?? 'wanted',
+            'note' => $data['note'] ?? null,
         ]);
     }
 
@@ -35,31 +37,30 @@ class WishlistItemService
             'url' => $data['url'] ?? null,
             'store_name' => $data['store_name'] ?? null,
             'image_url' => $data['image_url'] ?? null,
+            'image_path' => $data['image_path'] ?? $item->image_path,
             'price' => $data['price'] ?? null,
             'currency' => $data['currency'] ?? null,
-            'note' => $data['note'] ?? null,
+            'category' => $data['category'] ?? null,
             'priority' => $data['priority'] ?? 'medium',
-            'is_hidden' => (bool) ($data['is_hidden'] ?? false),
+            'status' => $data['status'] ?? 'wanted',
+            'note' => $data['note'] ?? null,
         ]);
 
         return $item->fresh();
     }
 
-    public function delete(WishlistItem $item): void
+    public function claim(WishlistItem $item, User $user, array $data = []): WishlistItemClaim
     {
-        $item->delete();
-    }
-
-    public function claim(WishlistItem $item, User $user): void
-    {
-        if (! $item->wishlist->allow_multi_claim && $item->claims()->exists()) {
-            return;
-        }
-
-        WishlistItemClaim::query()->firstOrCreate([
-            'wishlist_item_id' => $item->id,
-            'user_id' => $user->id,
-        ]);
+        return WishlistItemClaim::query()->updateOrCreate(
+            [
+                'wishlist_item_id' => $item->id,
+                'user_id' => $user->id,
+            ],
+            [
+                'status' => $data['status'] ?? 'reserved',
+                'comment' => $data['comment'] ?? null,
+            ]
+        );
     }
 
     public function unclaim(WishlistItem $item, User $user): void
@@ -68,5 +69,14 @@ class WishlistItemService
             ->where('wishlist_item_id', $item->id)
             ->where('user_id', $user->id)
             ->delete();
+    }
+
+    public function markPurchased(WishlistItem $item): WishlistItem
+    {
+        $item->update([
+            'status' => 'purchased',
+        ]);
+
+        return $item->fresh();
     }
 }

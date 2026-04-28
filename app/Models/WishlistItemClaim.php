@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class WishlistItemClaim extends Model
 {
@@ -14,12 +13,12 @@ class WishlistItemClaim extends Model
         'comment',
     ];
 
-    public function item(): BelongsTo
+    public function item()
     {
         return $this->belongsTo(WishlistItem::class, 'wishlist_item_id');
     }
 
-    public function user(): BelongsTo
+    public function user()
     {
         return $this->belongsTo(User::class);
     }

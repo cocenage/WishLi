@@ -3,6 +3,7 @@
 namespace App\Services\Telegram;
 
 use App\Models\User;
+use App\Models\UserNotificationSetting;
 
 class TelegramMiniAppUserService
 {
@@ -12,7 +13,7 @@ class TelegramMiniAppUserService
             ($telegramUser['first_name'] ?? '') . ' ' . ($telegramUser['last_name'] ?? '')
         );
 
-        return User::query()->updateOrCreate(
+        $user = User::query()->updateOrCreate(
             [
                 'telegram_id' => $telegramUser['id'],
             ],
@@ -28,5 +29,20 @@ class TelegramMiniAppUserService
                 'approved_at' => now(),
             ]
         );
+
+        UserNotificationSetting::query()->firstOrCreate(
+            ['user_id' => $user->id],
+            [
+                'wishlist_joined' => true,
+                'item_claimed' => true,
+                'item_unclaimed' => true,
+                'wishlist_updated' => true,
+                'event_reminders' => true,
+                'marketing' => false,
+                'reminder_days' => [7, 3, 1],
+            ]
+        );
+
+        return $user;
     }
 }

@@ -11,28 +11,40 @@ return new class extends Migration
         Schema::create('wishlists', function (Blueprint $table) {
             $table->id();
 
-            $table->foreignId('owner_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('owner_id')
+                ->constrained('users')
+                ->cascadeOnDelete();
 
             $table->string('title');
             $table->text('description')->nullable();
 
+            $table->string('type')->default('custom');
             $table->date('event_date')->nullable();
 
-            $table->enum('visibility', ['private', 'link', 'invited'])->default('link');
+            $table->enum('visibility', [
+                'private',
+                'link',
+                'invited',
+                'public',
+            ])->default('link');
+
             $table->boolean('allow_item_addition')->default(true);
-            $table->boolean('allow_multi_claim')->default(true);
+            $table->boolean('allow_multi_claim')->default(false);
+            $table->boolean('hide_claimers')->default(true);
 
             $table->string('cover_image')->nullable();
-            $table->string('color')->nullable();
-            $table->string('emoji')->nullable();
+            $table->string('emoji')->default('🎁');
+            $table->string('color')->default('yellow');
 
-            $table->string('type')->nullable();
             $table->boolean('is_closed')->default(false);
-            $table->boolean('hide_claimers')->default(false);
-
             $table->boolean('is_archived')->default(false);
+            $table->timestamp('closed_at')->nullable();
 
             $table->timestamps();
+
+            $table->index(['owner_id', 'is_archived']);
+            $table->index(['visibility', 'is_closed']);
+            $table->index('event_date');
         });
     }
 

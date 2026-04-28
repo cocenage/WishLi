@@ -3,9 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Wishlist extends Model
 {
@@ -13,17 +10,18 @@ class Wishlist extends Model
         'owner_id',
         'title',
         'description',
+        'type',
         'event_date',
         'visibility',
         'allow_item_addition',
         'allow_multi_claim',
-        'cover_image',
-        'color',
-        'emoji',
-        'is_archived',
-        'type',
-        'is_closed',
         'hide_claimers',
+        'cover_image',
+        'emoji',
+        'color',
+        'is_closed',
+        'is_archived',
+        'closed_at',
     ];
 
     protected function casts(): array
@@ -32,106 +30,47 @@ class Wishlist extends Model
             'event_date' => 'date',
             'allow_item_addition' => 'boolean',
             'allow_multi_claim' => 'boolean',
-            'is_archived' => 'boolean',
-            'is_closed' => 'boolean',
             'hide_claimers' => 'boolean',
+            'is_closed' => 'boolean',
+            'is_archived' => 'boolean',
+            'closed_at' => 'datetime',
         ];
     }
 
-    public function owner(): BelongsTo
+    public function owner()
     {
         return $this->belongsTo(User::class, 'owner_id');
     }
 
-    public function items(): HasMany
+    public function items()
     {
-        return $this->hasMany(WishlistItem::class);
+        return $this->hasMany(WishlistItem::class)->orderBy('sort_order')->latest();
     }
 
-    public function memberLinks(): HasMany
-    {
-        return $this->hasMany(WishlistMember::class);
-    }
-
-    public function members(): BelongsToMany
+    public function members()
     {
         return $this->belongsToMany(User::class, 'wishlist_members')
             ->withPivot(['role', 'status'])
             ->withTimestamps();
     }
 
-    public function getItemsCountAttribute(): int
+    public function memberLinks()
     {
-        return $this->items->count();
+        return $this->hasMany(WishlistMember::class);
     }
 
-    public function getParticipantsCountAttribute(): int
-    {
-        return $this->memberLinks()
-            ->where('status', 'accepted')
-            ->count();
-    }
-
-    public function getClaimsCountAttribute(): int
-    {
-        return WishlistItemClaim::query()
-            ->whereHas('item', fn($query) => $query->where('wishlist_id', $this->id))
-            ->count();
-    }
-
-    public function isOwnedBy(?User $user): bool
-    {
-        return $user && $this->owner_id === $user->id;
-    }
-
-    public function hasParticipant(?User $user): bool
-    {
-        if (!$user) {
-            return false;
-        }
-
-        return $this->memberLinks()
-            ->where('user_id', $user->id)
-            ->where('status', 'accepted')
-            ->exists();
-    }
-
-    public function invites(): HasMany
+    public function invites()
     {
         return $this->hasMany(WishlistInvite::class);
     }
 
-    public function scopeOwnedBy($query, int $userId)
+    public function isUnavailable(): bool
     {
-        return $query->where('owner_id', $userId);
-    }
-
-    public function scopeSharedWith($query, int $userId)
-    {
-        return $query->whereHas('memberLinks', function ($q) use ($userId) {
-            $q->where('user_id', $userId)
-                ->where('status', 'accepted');
-        })->where('owner_id', '!=', $userId);
+        return $this->is_closed || $this->is_archived;
     }
 
     public function isExpired(): bool
     {
         return $this->event_date && $this->event_date->isPast();
-    }
-
-    public function isUnavailable(): bool
-    {
-        return $this->is_closed || $this->isExpired();
-    }
-
-    public function typeLabel(): string
-    {
-        return match ($this->type) {
-            'birthday' => 'День рождения',
-            'new_year' => 'Новый год',
-            'wedding' => 'Свадьба',
-            'house' => 'Переезд',
-            default => 'Вишлист',
-        };
     }
 }

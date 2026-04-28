@@ -6,19 +6,10 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-
-            /*
-             |--------------------------------------------------------------------------
-             | Telegram Mini App auth
-             |--------------------------------------------------------------------------
-             */
 
             $table->unsignedBigInteger('telegram_id')->nullable()->unique();
             $table->string('telegram_username')->nullable();
@@ -27,25 +18,15 @@ return new class extends Migration
             $table->string('telegram_photo_url')->nullable();
             $table->timestamp('telegram_last_auth_at')->nullable();
 
-            /*
-             |--------------------------------------------------------------------------
-             | Basic auth fields
-             |--------------------------------------------------------------------------
-             */
-
             $table->string('name');
             $table->string('email')->nullable()->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password')->nullable();
 
-            /*
-             |--------------------------------------------------------------------------
-             | Access/status
-             |--------------------------------------------------------------------------
-             */
-
+            $table->string('role')->default('user');
             $table->string('status')->default('approved');
             $table->boolean('is_active')->default(true);
+            $table->timestamp('approved_at')->nullable();
 
             $table->rememberToken();
             $table->timestamps();
@@ -67,13 +48,10 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('users');
-        Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('sessions');
+        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('users');
     }
 };

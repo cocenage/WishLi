@@ -3,31 +3,39 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
     <title>Wishli</title>
 
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 
-<body class="min-h-screen bg-[#E7E3DD] flex items-center justify-center px-5">
-    <div class="w-full max-w-[420px] rounded-[32px] bg-white/70 p-6 text-center shadow-sm backdrop-blur">
-        <div class="text-[30px] font-semibold tracking-[-0.05em] text-[#171717]">
-            Wishli
-        </div>
+<body class="min-h-screen bg-[#F4F3EF] px-5 text-[#141414]">
+    <div class="mx-auto flex min-h-screen w-full max-w-[430px] items-center justify-center">
+        <div class="w-full rounded-[38px] bg-white/70 p-7 text-center shadow-[0_18px_50px_rgba(0,0,0,0.06)] backdrop-blur-xl">
+            <div class="mx-auto flex h-[74px] w-[74px] items-center justify-center rounded-full bg-[#171717] text-[34px] text-white">
+                🎁
+            </div>
 
-        <div id="status" class="mt-3 text-[15px] text-[#666]">
-            Входим через Telegram...
-        </div>
+            <div class="mt-6 text-[58px] font-semibold leading-none tracking-[-0.08em]">
+                Wishli
+            </div>
 
-        @if(app()->environment('local'))
-            <a
-                href="{{ route('dev-login') }}"
-                id="dev-login"
-                class="mt-6 hidden rounded-[22px] bg-black px-6 py-4 text-white"
-            >
-                Dev login
-            </a>
-        @endif
+            <div id="status" class="mx-auto mt-4 max-w-[280px] text-[15px] leading-[1.35] text-[#6C6A64]">
+                Входим через Telegram...
+            </div>
+
+            @if(app()->environment('local'))
+                <a
+                    href="{{ route('dev-login') }}"
+                    id="dev-login"
+                    class="mt-6 hidden h-[58px] items-center justify-center rounded-full bg-[#171717] px-7 text-[15px] font-medium text-white"
+                >
+                    Dev login
+                </a>
+            @endif
+        </div>
     </div>
 
     <script>
@@ -42,7 +50,7 @@
 
                 if (devLogin) {
                     devLogin.classList.remove('hidden');
-                    devLogin.classList.add('inline-block');
+                    devLogin.classList.add('inline-flex');
                 }
 
                 return;

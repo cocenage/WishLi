@@ -11,11 +11,23 @@ return new class extends Migration
         Schema::create('wishlist_members', function (Blueprint $table) {
             $table->id();
 
-            $table->foreignId('wishlist_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('wishlist_id')
+                ->constrained()
+                ->cascadeOnDelete();
 
-            $table->enum('role', ['owner', 'participant'])->default('participant');
-            $table->enum('status', ['pending', 'accepted'])->default('accepted');
+            $table->foreignId('user_id')
+                ->constrained()
+                ->cascadeOnDelete();
+
+            $table->enum('role', [
+                'owner',
+                'participant',
+            ])->default('participant');
+
+            $table->enum('status', [
+                'pending',
+                'accepted',
+            ])->default('accepted');
 
             $table->timestamps();
 

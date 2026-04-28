@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class WishlistInvite extends Model
 {
@@ -23,26 +22,13 @@ class WishlistInvite extends Model
         ];
     }
 
-    public function wishlist(): BelongsTo
+    public function wishlist()
     {
         return $this->belongsTo(Wishlist::class);
     }
 
-    public function creator(): BelongsTo
+    public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
-    }
-
-    public function isUsable(): bool
-    {
-        if (! $this->is_active) {
-            return false;
-        }
-
-        if ($this->expires_at && $this->expires_at->isPast()) {
-            return false;
-        }
-
-        return true;
     }
 }

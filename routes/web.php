@@ -24,6 +24,8 @@ Route::get('/dev-login', function () {
             'password' => Hash::make('password'),
             'telegram_id' => 999999999,
             'telegram_username' => 'dev_user',
+            'telegram_first_name' => 'Dev',
+            'telegram_last_name' => 'User',
             'status' => 'approved',
             'is_active' => true,
             'approved_at' => now(),
@@ -40,13 +42,29 @@ Route::get('/dev-login', function () {
 $middleware = app()->environment('local') ? ['auth'] : ['tg.auth'];
 
 Route::middleware($middleware)->group(function () {
-    Route::livewire('/wishlists', 'page-wishlists')->name('page-wishlists');
-    Route::livewire('/wishlists/create', 'page-wishlist-create')->name('page-wishlist-create');
-    Route::livewire('/wishlists/{wishlist}', 'page-wishlist-show')->name('page-wishlist-show');
-    Route::livewire('/wishlists/{wishlist}/edit', 'page-wishlist-edit')->name('page-wishlist-edit');
-    Route::livewire('/wishlists/{wishlist}/items/create', 'page-wishlist-item-create')->name('page-wishlist-item-create');
-    Route::livewire('/wishlists/{wishlist}/items/{item}/edit', 'page-wishlist-item-edit')->name('page-wishlist-item-edit');
-    Route::livewire('/wishlist-invites/{token}', 'page-wishlist-invite')->name('page-wishlist-invite');
+    Route::livewire('/wishlists', 'page-wishlists')
+        ->name('page-wishlists');
+
+    Route::livewire('/wishlists/create', 'page-wishlist-create')
+        ->name('page-wishlist-create');
+
+    Route::livewire('/wishlists/{wishlist}', 'page-wishlist-show')
+        ->name('page-wishlist-show');
+
+    Route::livewire('/wishlists/{wishlist}/edit', 'page-wishlist-edit')
+        ->name('page-wishlist-edit');
+
+    Route::livewire('/wishlists/{wishlist}/items/create', 'page-wishlist-item-create')
+        ->name('page-wishlist-item-create');
+
+    Route::livewire('/wishlists/{wishlist}/items/{item}/edit', 'page-wishlist-item-edit')
+        ->name('page-wishlist-item-edit');
+
+    Route::livewire('/wishlist-invites/{token}', 'page-wishlist-invite')
+        ->name('page-wishlist-invite');
+
+    Route::livewire('/notification-settings', 'page-notification-settings')
+        ->name('page-notification-settings');
 });
 
 Route::fallback(fn () => redirect()->route('telegram.login'));
